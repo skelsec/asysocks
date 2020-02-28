@@ -58,7 +58,10 @@ class SOCKS4Request:
         if target.is_bind is True:
             SOCKS4CDCode.REQ_BIND
         o.DSTPORT = target.endpoint_port
-        o.DSTIP = target.endpoint_ip
+        if isinstance(target.endpoint_ip, ipaddress.IPv4Address):
+            o.DSTIP = target.endpoint_ip
+        else:
+            o.DSTIP = ipaddress.ip_address(target.endpoint_ip)
         o.USERID = target.userid
         if target.userid is None:
             o.USERID = os.urandom(4).hex().encode('ascii')

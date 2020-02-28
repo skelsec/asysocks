@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import re
 
-VERSIONFILE="msldap/_version.py"
+VERSIONFILE="asysocks/_version.py"
 verstrline = open(VERSIONFILE, "rt").read()
 VSRE = r"^__version__ = ['\"]([^'\"]*)['\"]"
 mo = re.search(VSRE, verstrline, re.M)
@@ -20,7 +20,7 @@ setup(
 
 	# Application author details:
 	author="Tamas Jos",
-	author_email="info@skelsec.com",
+	author_email="info@skelsecprojects.com",
 
 	# Packages
 	packages=find_packages(),
@@ -30,13 +30,13 @@ setup(
 
 
 	# Details
-	url="https://github.com/skelsec/msldap",
+	url="https://github.com/skelsec/asysocks",
 
 	zip_safe = True,
 	#
 	# license="LICENSE.txt",
-	description="Python library to play with MS LDAP",
-	long_description="Python library to play with MS LDAP",
+	description="",
+	long_description="",
 
 	# long_description=open("README.txt").read(),
 	python_requires='>=3.6',

@@ -52,6 +52,10 @@ class SOCKSClient:
 			logger.exception('')
 		finally:
 			proxy_stopped_evt.set()
+			try:
+				writer.close()
+			except:
+				pass
 
 	@staticmethod
 	async def proxy_queue_out(out_queue, reader, proxy_stopped_evt, buffer_size = 4096, timeout = None):
@@ -63,30 +67,40 @@ class SOCKSClient:
 				)
 				if data == b'':
 					logger.debug('proxy_queue_out endpoint disconncted!')
-				await out_queue.put(data)
+					await out_queue.put((None, Exception('proxy_queue_out endpoint disconncted!')))
+					return
+				await out_queue.put((data, None))
 		except asyncio.CancelledError:
 			return
-		except:
+		except Exception as e:
 			logger.exception('')
+			try:
+				await out_queue.put((None, e))
+			except:
+				pass
 		finally:
 			proxy_stopped_evt.set()
+			
 
 	async def run_socks4(self, remote_reader, remote_writer):
 		"""
 		Does the intial "handshake" instructing the remote server to set up the connection to the endpoint
 		"""
-		logger.debug('[SOCKS4] Requesting new channel from remote socks server')
-		req = SOCKS4Request.from_target(self.target)
-		remote_writer.write(req.to_bytes())
-		await asyncio.wait_for(remote_writer.drain(), timeout = int(self.target.timeout))
-		rep = await SOCKS4Reply.from_streamreader(remote_reader, timeout = self.target.timeout)
+		try:
+			logger.debug('[SOCKS4] Requesting new channel from remote socks server')
+			req = SOCKS4Request.from_target(self.target)
+			remote_writer.write(req.to_bytes())
+			await asyncio.wait_for(remote_writer.drain(), timeout = int(self.target.timeout))
+			rep = await SOCKS4Reply.from_streamreader(remote_reader, timeout = self.target.timeout)
 
-		if rep is None:
-			raise Exception('Socks server failed to reply to CONNECT request!')
+			if rep is None:
+				raise Exception('Socks server failed to reply to CONNECT request!')
 
-		if rep.CD != SOCKS4CDCode.REP_GRANTED:
-			raise Exception('Socks server returned error on CONNECT! %s' % rep.CD.value)
-		logger.debug('[SOCKS4] Channel opened')            
+			if rep.CD != SOCKS4CDCode.REP_GRANTED:
+				raise Exception('Socks server returned error on CONNECT! %s' % rep.CD.value)
+			logger.debug('[SOCKS4] Channel opened')
+		except:
+			logger.exception('run_socks4')          
 
 	async def run_socks5(self, remote_reader, remote_writer):
 		"""
