@@ -40,6 +40,10 @@ class SocksClientURL:
 		self.endpoint_timeout = None
 		self.userid = None
 
+	def get_creds(self):
+		#TODO: implement this!
+		return None
+
 	def get_target(self):
 		target = SocksTarget()
 		target.version = self.version

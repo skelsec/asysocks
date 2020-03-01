@@ -44,6 +44,7 @@ class SOCKSClient:
 				data = await in_queue.get()
 				if data is None:
 					logger.debug('proxy_queue_in client disconncted!')
+					return
 				writer.write(data)
 				await writer.drain()
 		except asyncio.CancelledError:
@@ -87,7 +88,8 @@ class SOCKSClient:
 		Does the intial "handshake" instructing the remote server to set up the connection to the endpoint
 		"""
 		try:
-			logger.debug('[SOCKS4] Requesting new channel from remote socks server')
+			#logger.debug('[SOCKS4] Requesting new channel from remote socks server')
+			logger.debug('[SOCKS5] Opening channel to %s:%s' % (self.target.endpoint_ip, self.target.endpoint_port))
 			req = SOCKS4Request.from_target(self.target)
 			remote_writer.write(req.to_bytes())
 			await asyncio.wait_for(remote_writer.drain(), timeout = int(self.target.timeout))
@@ -143,6 +145,7 @@ class SOCKSClient:
 				#if rep_auth_nego.METHOD != SOCKS5Method.NOAUTH:
 				#	raise Exception('Failed to connect to proxy %s:%d! Authentication failed!' % self.proxy_writer.get_extra_info('peername'))
 
+			logger.debug('[SOCKS5] Opening channel to %s:%s' % (self.target.endpoint_ip, self.target.endpoint_port))
 			logger.debug('[SOCKS5] Sending connect request to SOCKS server @ %s:%d' % remote_writer.get_extra_info('peername'))
 			remote_writer.write(
 				SOCKS5Request.from_target(
