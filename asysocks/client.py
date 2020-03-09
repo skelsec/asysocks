@@ -231,7 +231,7 @@ class SOCKSClient:
 				),
 				timeout = self.target.timeout
 			)
-
+			self.target.timeout = None #connection succseeeded, timeout is not pointless
 			logger.debug('[queue] Connected to socks server!')
 		except:
 			logger.exception('[queue] Failed to connect to SOCKS server!')
