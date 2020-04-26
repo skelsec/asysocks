@@ -33,7 +33,7 @@ class SOCKSClient:
 		except asyncio.CancelledError:
 			return
 		except:
-			logger.exception('')
+			logger.debug('')
 		finally:
 			proxy_stopped_evt.set()
 
@@ -50,7 +50,7 @@ class SOCKSClient:
 		except asyncio.CancelledError:
 			return
 		except:
-			logger.exception('')
+			logger.debug('')
 		finally:
 			proxy_stopped_evt.set()
 			try:
@@ -74,7 +74,7 @@ class SOCKSClient:
 		except asyncio.CancelledError:
 			return
 		except Exception as e:
-			logger.exception('')
+			logger.debug('')
 			try:
 				await out_queue.put((None, e))
 			except:
@@ -101,8 +101,10 @@ class SOCKSClient:
 			if rep.CD != SOCKS4CDCode.REP_GRANTED:
 				raise Exception('Socks server returned error on CONNECT! %s' % rep.CD.value)
 			logger.debug('[SOCKS4] Channel opened')
-		except:
-			logger.exception('run_socks4')          
+			return True, None
+		except Exception as e:
+			logger.debug('run_socks4')
+			return False, e          
 
 	async def run_socks5(self, remote_reader, remote_writer):
 		"""
@@ -112,7 +114,7 @@ class SOCKSClient:
 		
 		methods = [SOCKS5Method.NOAUTH]
 		if self.credentials is not None:
-			raise Exception('SOCKS5 authentication is not supported for the moment')
+			return False, Exception('SOCKS5 authentication is not supported for the moment')
 			#add additional methods here
 		
 		try:
@@ -122,12 +124,12 @@ class SOCKSClient:
 			remote_writer.write(nego.to_bytes())
 			await asyncio.wait_for(
 				remote_writer.drain(), 
-				timeout = int(self.target.timeout)
+				timeout = self.target.timeout
 			)
 
 			rep_nego = await asyncio.wait_for(
 				SOCKS5NegoReply.from_streamreader(remote_reader), 
-				timeout = int(self.target.timeout)
+				timeout = self.target.timeout
 			)
 			logger.debug(
 				'[SOCKS5] Got negotiation reply from from %s! Server choosen auth type: %s' % 
@@ -154,22 +156,23 @@ class SOCKSClient:
 			)
 			await asyncio.wait_for(
 				remote_writer.drain(), 
-				timeout=int(self.target.timeout)
+				timeout=self.target.timeout
 			)
 
 			rep = await asyncio.wait_for(
 				SOCKS5Reply.from_streamreader(remote_reader), 
-				timeout=int(self.target.timeout)
+				timeout=self.target.timeout
 			)
 			if rep.REP != SOCKS5ReplyType.SUCCEEDED:
 				#logger.info('Failed to connect to proxy %s! Server replied: %s' % (self.proxy_writer.get_extra_info('peername'), repr(rep.REP)))
 				raise Exception('Socks5 remote end failed to connect to target! Reson: %s' % rep.REP.name)
+				
 			
 			logger.debug('[SOCKS5] Server @ %s:%d successfully set up the connection to the endpoint! ' % remote_writer.get_extra_info('peername'))
-
-		except:
-			logger.exception('[SOCKS5] Error in run_socks5')
-			raise
+			return True, None
+		except Exception as e:
+			logger.debug('[SOCKS5] Error in run_socks5')
+			return False, e
 
 	async def handle_client(self, reader, writer):
 		logger.debug('[handle_client] Client connected!')
@@ -183,14 +186,18 @@ class SOCKSClient:
 			)
 			logger.debug('Connected to socks server!')
 		except:
-			logger.exception('Failed to connect to SOCKS server!')
+			logger.debug('Failed to connect to SOCKS server!')
 			raise
 		
 		if self.target.version == SocksServerVersion.SOCKS4:
-			await self.run_socks4(remote_reader, remote_writer)
+			_, err = await self.run_socks4(remote_reader, remote_writer)
+			if err is not None:
+				raise err
 
 		elif self.target.version == SocksServerVersion.SOCKS5:
-			await self.run_socks5(remote_reader, remote_writer)
+			_, err = await self.run_socks5(remote_reader, remote_writer)
+			if err is not None:
+				raise err
 		else:
 			raise Exception('Unknown SOCKS version!')
 		
@@ -233,37 +240,41 @@ class SOCKSClient:
 			)
 			self.target.timeout = None #connection succseeeded, timeout is not pointless
 			logger.debug('[queue] Connected to socks server!')
-		except:
-			logger.exception('[queue] Failed to connect to SOCKS server!')
-			raise
 
+			if self.target.version == SocksServerVersion.SOCKS4:
+				_, err = await self.run_socks4(remote_reader, remote_writer)
+				if err is not None:
+					raise err
 
-		if self.target.version == SocksServerVersion.SOCKS4:
-			await self.run_socks4(remote_reader, remote_writer)
-
-		elif self.target.version == SocksServerVersion.SOCKS5:
-			await self.run_socks5(remote_reader, remote_writer)
-		else:
-			raise Exception('[queue] Unknown SOCKS version!')
-		
-		logger.debug('[queue] Starting proxy...')
-		
-		proxy_stopped_evt = asyncio.Event()
-		pt_in = asyncio.create_task(
-			SOCKSClient.proxy_queue_in(
-				self.comms.in_queue, remote_writer, proxy_stopped_evt, buffer_size = self.target.buffer_size
+			elif self.target.version == SocksServerVersion.SOCKS5:
+				_, err = await self.run_socks5(remote_reader, remote_writer)
+				if err is not None:
+					raise err
+			else:
+				raise Exception('[queue] Unknown SOCKS version!')
+			
+			logger.debug('[queue] Starting proxy...')
+			
+			proxy_stopped_evt = asyncio.Event()
+			pt_in = asyncio.create_task(
+				SOCKSClient.proxy_queue_in(
+					self.comms.in_queue, remote_writer, proxy_stopped_evt, buffer_size = self.target.buffer_size
+				)
 			)
-		)
-		pt_out = asyncio.create_task(
-			SOCKSClient.proxy_queue_out(
-				self.comms.out_queue, remote_reader, proxy_stopped_evt, buffer_size = self.target.buffer_size
+			pt_out = asyncio.create_task(
+				SOCKSClient.proxy_queue_out(
+					self.comms.out_queue, remote_reader, proxy_stopped_evt, buffer_size = self.target.buffer_size
+				)
 			)
-		)
-		logger.debug('[queue] Proxy started!')
-		await proxy_stopped_evt.wait()
-		logger.debug('[queue] Proxy stopped!')
-		pt_in.cancel()
-		pt_out.cancel()
+			logger.debug('[queue] Proxy started!')
+			await proxy_stopped_evt.wait()
+			logger.debug('[queue] Proxy stopped!')
+			pt_in.cancel()
+			pt_out.cancel()
+		
+		except Exception as e:
+			await self.comms.in_queue.put((None, e))
+			await self.comms.out_queue.put((None,e))
 
 
 	async def run(self):
