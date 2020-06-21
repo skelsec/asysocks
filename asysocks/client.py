@@ -13,9 +13,18 @@ class SOCKSClient:
 		self.comms = comms
 		self.credentials = credentials
 		self.server_task = None
+		self.proxytask_in = None
+		self.proxytask_out = None
+		self.proxy_stopped_evt = None
 	
 	async def terminate(self):
-		return
+		if self.proxy_stopped_evt is not None:
+			self.proxy_stopped_evt.set()
+		if self.proxytask_in is not None:
+			self.proxytask_in.cancel()
+		if self.proxytask_out is not None:
+			self.proxytask_out.cancel()
+
 
 	@staticmethod
 	async def proxy_stream(in_stream, out_stream, proxy_stopped_evt, buffer_size = 4096, timeout = None):
@@ -202,34 +211,35 @@ class SOCKSClient:
 			raise Exception('Unknown SOCKS version!')
 		
 		logger.debug('[handle_client] Starting proxy...')
-		proxy_stopped_evt = asyncio.Event()
-		pt_in = asyncio.create_task(
+		self.proxy_stopped_evt = asyncio.Event()
+		self.proxytask_in = asyncio.create_task(
 			SOCKSClient.proxy_stream(
 				reader, 
 				remote_writer, 
-				proxy_stopped_evt , 
+				self.proxy_stopped_evt , 
 				buffer_size = self.target.buffer_size,
 				timeout = self.target.endpoint_timeout
 			)
 		)
-		pt_out = asyncio.create_task(
+		self.proxytask_out = asyncio.create_task(
 			SOCKSClient.proxy_stream(
 				remote_reader, 
 				writer, 
-				proxy_stopped_evt, 
+				self.proxy_stopped_evt, 
 				buffer_size = self.target.buffer_size,
 				timeout = self.target.endpoint_timeout
 			)
 		)
 		logger.debug('[handle_client] Proxy started!')
-		await proxy_stopped_evt.wait()
+		await self.proxy_stopped_evt.wait()
 		logger.debug('[handle_client] Proxy stopped!')
-		pt_in.cancel()
-		pt_out.cancel()
+		self.proxytask_in.cancel()
+		self.proxytask_out.cancel()
 
 	async def handle_queue(self):
 		logger.debug('[queue] Connecting to socks server...')
 		#connecting to socks server
+		remote_writer = None
 		try:
 			remote_reader, remote_writer = await asyncio.wait_for(
 				asyncio.open_connection(
@@ -255,26 +265,30 @@ class SOCKSClient:
 			
 			logger.debug('[queue] Starting proxy...')
 			
-			proxy_stopped_evt = asyncio.Event()
-			pt_in = asyncio.create_task(
+			self.proxy_stopped_evt = asyncio.Event()
+			self.proxytask_in = asyncio.create_task(
 				SOCKSClient.proxy_queue_in(
-					self.comms.in_queue, remote_writer, proxy_stopped_evt, buffer_size = self.target.buffer_size
+					self.comms.in_queue, remote_writer, self.proxy_stopped_evt, buffer_size = self.target.buffer_size
 				)
 			)
-			pt_out = asyncio.create_task(
+			self.proxytask_out = asyncio.create_task(
 				SOCKSClient.proxy_queue_out(
-					self.comms.out_queue, remote_reader, proxy_stopped_evt, buffer_size = self.target.buffer_size
+					self.comms.out_queue, remote_reader, self.proxy_stopped_evt, buffer_size = self.target.buffer_size
 				)
 			)
 			logger.debug('[queue] Proxy started!')
-			await proxy_stopped_evt.wait()
+			await self.proxy_stopped_evt.wait()
 			logger.debug('[queue] Proxy stopped!')
-			pt_in.cancel()
-			pt_out.cancel()
+			self.proxytask_in.cancel()
+			self.proxytask_out.cancel()
 		
 		except Exception as e:
 			await self.comms.in_queue.put((None, e))
 			await self.comms.out_queue.put((None,e))
+		
+		finally:
+			if remote_writer is not None:
+				remote_writer.close()
 
 
 	async def run(self):
