@@ -77,10 +77,11 @@ class SOCKSClient:
 				)
 				if data == b'':
 					logger.debug('proxy_queue_out endpoint disconncted!')
-					await out_queue.put((None, Exception('proxy_queue_out endpoint disconncted!')))
+					await out_queue.put((None, Exception('proxy_queue_out endpoint disconncted gracefully!')))
 					return
 				await out_queue.put((data, None))
 		except asyncio.CancelledError:
+			await out_queue.put((None, Exception('proxy_queue_out got cancelled!')))
 			return
 		except Exception as e:
 			logger.debug('')
@@ -101,8 +102,10 @@ class SOCKSClient:
 			logger.debug('[SOCKS5] Opening channel to %s:%s' % (self.target.endpoint_ip, self.target.endpoint_port))
 			req = SOCKS4Request.from_target(self.target)
 			remote_writer.write(req.to_bytes())
-			await asyncio.wait_for(remote_writer.drain(), timeout = int(self.target.timeout))
-			rep = await SOCKS4Reply.from_streamreader(remote_reader, timeout = self.target.timeout)
+			await asyncio.wait_for(remote_writer.drain(), timeout = self.target.timeout)
+			rep, err = await asyncio.wait_for(SOCKS4Reply.from_streamreader(remote_reader), timeout = self.target.timeout)
+			if err is not None:
+				raise err
 
 			if rep is None:
 				raise Exception('Socks server failed to reply to CONNECT request!')
@@ -248,7 +251,7 @@ class SOCKSClient:
 				),
 				timeout = self.target.timeout
 			)
-			self.target.timeout = None #connection succseeeded, timeout is not pointless
+
 			logger.debug('[queue] Connected to socks server!')
 
 			if self.target.version == SocksServerVersion.SOCKS4:
@@ -268,12 +271,19 @@ class SOCKSClient:
 			self.proxy_stopped_evt = asyncio.Event()
 			self.proxytask_in = asyncio.create_task(
 				SOCKSClient.proxy_queue_in(
-					self.comms.in_queue, remote_writer, self.proxy_stopped_evt, buffer_size = self.target.buffer_size
+					self.comms.in_queue, 
+					remote_writer, 
+					self.proxy_stopped_evt, 
+					buffer_size = self.target.buffer_size
 				)
 			)
 			self.proxytask_out = asyncio.create_task(
 				SOCKSClient.proxy_queue_out(
-					self.comms.out_queue, remote_reader, self.proxy_stopped_evt, buffer_size = self.target.buffer_size
+					self.comms.out_queue, 
+					remote_reader, 
+					self.proxy_stopped_evt, 
+					buffer_size = self.target.buffer_size, 
+					timeout=self.target.endpoint_timeout
 				)
 			)
 			logger.debug('[queue] Proxy started!')

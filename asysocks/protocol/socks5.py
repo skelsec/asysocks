@@ -84,20 +84,21 @@ class SOCKS5CommandParser:
 
 	@staticmethod
 	async def from_streamreader(reader, session, timeout = None):
-		if session.current_state == SOCKS5ServerState.NEGOTIATION:
-			t = await asyncio.wait_for(SOCKS5Nego.from_streamreader(reader), timeout = timeout)
-			return t
-		
-		if session.current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
-			if session.mutual_auth_type == SOCKS5Method.PLAIN:
-				t = await asyncio.wait_for(SOCKS5PlainAuth.from_streamreader(reader), timeout = timeout)
-				return t
-			else:
-				raise Exception('Not implemented!')
-
-		if session.current_state == SOCKS5ServerState.REQUEST:
-			t = await asyncio.wait_for(SOCKS5Request.from_streamreader(reader), timeout = timeout)
-			return t
+		raise NotImplementedError()
+		#if session.current_state == SOCKS5ServerState.NEGOTIATION:
+		#	t = await asyncio.wait_for(SOCKS5Nego.from_streamreader(reader), timeout = timeout)
+		#	return t
+		#
+		#if session.current_state == SOCKS5ServerState.NOT_AUTHENTICATED:
+		#	if session.mutual_auth_type == SOCKS5Method.PLAIN:
+		#		t = await asyncio.wait_for(SOCKS5PlainAuth.from_streamreader(reader), timeout = timeout)
+		#		return t
+		#	else:
+		#		raise Exception('Not implemented!')
+		#
+		#if session.current_state == SOCKS5ServerState.REQUEST:
+		#	t = await asyncio.wait_for(SOCKS5Request.from_streamreader(reader), timeout = timeout)
+		#	return t
 
 
 class SOCKS5AuthHandler:
@@ -141,17 +142,17 @@ class SOCKS5PlainAuth:
 		self.PASSWD = None
 
 	@staticmethod
-	async def from_streamreader(reader, timeout = None):
+	async def from_streamreader(reader):
 		auth = SOCKS5PlainAuth()
-		t = await read_or_exc(reader, 1, timeout = timeout)
+		t = await reader.read(1)
 		auth.VER = int.from_bytes(t, byteorder = 'big', signed = False)
-		t = await read_or_exc(reader, 1, timeout = timeout)
+		t = await reader.read(1)
 		auth.ULEN = int.from_bytes(t, byteorder = 'big', signed = False)
-		t = await read_or_exc(reader, auth.ULEN, timeout = timeout)
+		t = await reader.read(auth.ULEN)
 		auth.UNAME = t.decode()
-		t = await read_or_exc(reader, 1, timeout = timeout)
+		t = await reader.read(1)
 		auth.PLEN = int.from_bytes(t, byteorder = 'big', signed = False)
-		t = await read_or_exc(reader, auth.PLEN, timeout = timeout)
+		t = await reader.read(auth.PLEN)
 		auth.PASSWD = t.decode()
 
 		return auth
@@ -198,15 +199,15 @@ class SOCKS5Nego:
 		self.METHODS = None
 
 	@staticmethod
-	async def from_streamreader(reader, timeout = None):
+	async def from_streamreader(reader):
 		nego = SOCKS5Nego()
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		nego.VER = int.from_bytes(t, byteorder = 'big', signed = False)
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		nego.NMETHODS = int.from_bytes(t, byteorder = 'big', signed = False)
 		nego.METHODS = []
 		for _ in range(nego.NMETHODS):
-			t = await read_or_exc(reader,1, timeout = timeout)
+			t = await reader.readexactly(1)
 			nego.METHODS.append(SOCKS5Method(int.from_bytes(t, byteorder = 'big', signed = False)))
 
 		return nego
@@ -267,11 +268,11 @@ class SOCKS5NegoReply:
 		return SOCKS5NegoReply.from_bytes(data)
 
 	@staticmethod
-	async def from_streamreader(reader, timeout = None):
+	async def from_streamreader(reader):
 		rep = SOCKS5NegoReply()
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		rep.VER = int.from_bytes(t, byteorder = 'big', signed = False)
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		rep.METHOD = SOCKS5Method(int.from_bytes(t, byteorder = 'big', signed = False))
 		
 		return rep
@@ -318,30 +319,30 @@ class SOCKS5Request:
 		self.DST_PORT = None
 
 	@staticmethod
-	async def from_streamreader(reader, timeout = None):
+	async def from_streamreader(reader):
 		req = SOCKS5Request()
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		req.VER = int.from_bytes(t, byteorder = 'big', signed = False)
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		req.CMD = SOCKS5Command(int.from_bytes(t, byteorder = 'big', signed = False))
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		req.RSV = int.from_bytes(t, byteorder = 'big', signed = False)
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		req.ATYP = SOCKS5AddressType(int.from_bytes(t, byteorder = 'big', signed = False))
 		if req.ATYP == SOCKS5AddressType.IP_V4:
-			t = await read_or_exc(reader,4, timeout = timeout)
+			t = await reader.readexactly(4)
 			req.DST_ADDR = ipaddress.IPv4Address(t)
 		elif req.ATYP == SOCKS5AddressType.IP_V6:
-			t = await read_or_exc(reader,16, timeout = timeout)
+			t = await reader.readexactly(16)
 			req.DST_ADDR = ipaddress.IPv6Address(t)
 
 		elif req.ATYP == SOCKS5AddressType.DOMAINNAME:
-			t = await read_or_exc(reader,1, timeout = timeout)
+			t = await reader.readexactly(1)
 			length = int.from_bytes(t, byteorder = 'big', signed = False)
-			t = await read_or_exc(reader,length, timeout = timeout)
+			t = await reader.readexactly(length)
 			req.DST_ADDR = t.decode()
 
-		t = await read_or_exc(reader,2, timeout = timeout)
+		t = await reader.readexactly(2)
 		req.DST_PORT = int.from_bytes(t, byteorder = 'big', signed = False)
 
 		return req
@@ -456,29 +457,29 @@ class SOCKS5Reply:
 		return SOCKS5Reply.from_bytes(data)
 
 	@staticmethod
-	async def from_streamreader(reader, timeout = None):
+	async def from_streamreader(reader):
 		rep = SOCKS5Reply()
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		rep.VER = int.from_bytes(t, byteorder = 'big', signed = False)
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		rep.REP = SOCKS5ReplyType(int.from_bytes(t, byteorder = 'big', signed = False))
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		rep.RSV = int.from_bytes(t, byteorder = 'big', signed = False)
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		rep.ATYP = SOCKS5AddressType(int.from_bytes(t, byteorder = 'big', signed = False))
 		if rep.ATYP == SOCKS5AddressType.IP_V4:
-			t = await read_or_exc(reader,4, timeout = timeout)
+			t = await reader.readexactly(4)
 			rep.BIND_ADDR = ipaddress.IPv4Address(t)
 		elif rep.ATYP == SOCKS5AddressType.IP_V6:
-			t = await read_or_exc(reader,16, timeout = timeout)
+			t = await reader.readexactly(16)
 			rep.BIND_ADDR = ipaddress.IPv6Address(t)
 		elif rep.ATYP == SOCKS5AddressType.DOMAINNAME:
-			t = await read_or_exc(reader,1, timeout = timeout)
+			t = await reader.readexactly(1)
 			length = int.from_bytes(t, byteorder = 'big', signed = False)
-			t = await read_or_exc(reader,length, timeout = timeout)
+			t = await reader.readexactly(length)
 			rep.BIND_ADDR = t.decode()
 
-		t = await read_or_exc(reader,2, timeout = timeout)
+		t = await reader.readexactly(2)
 		rep.BIND_PORT = int.from_bytes(t, byteorder = 'big', signed = False)
 		return rep
 
@@ -558,28 +559,28 @@ class SOCKS5UDP:
 		self.DATA = None
 
 	@staticmethod
-	async def from_streamreader(reader, timeout = None):
+	async def from_streamreader(reader):
 		rep = SOCKS5UDP()
-		t = await read_or_exc(reader,2, timeout = timeout)
+		t = await reader.readexactly(2)
 		rep.RSV = int.from_bytes(t, byteorder = 'big', signed = False)
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		rep.FRAG = SOCKS5ReplyType(int.from_bytes(t, byteorder = 'big', signed = False))
-		t = await read_or_exc(reader,1, timeout = timeout)
+		t = await reader.readexactly(1)
 		rep.ATYP = SOCKS5AddressType(int.from_bytes(t, byteorder = 'big', signed = False))
 		if rep.ATYP == SOCKS5AddressType.IP_V4:
-			t = await read_or_exc(reader,4, timeout = timeout)
+			t = await reader.readexactly(4)
 			rep.DST_ADDR = ipaddress.IPv4Address(t)
 		elif rep.ATYP == SOCKS5AddressType.IP_V6:
-			t = await read_or_exc(reader,16, timeout = timeout)
+			t = await reader.readexactly(16)
 			rep.DST_ADDR = ipaddress.IPv6Address(t)
 
 		elif rep.ATYP == SOCKS5AddressType.DOMAINNAME:
-			t = await read_or_exc(reader,1, timeout = timeout)
+			t = await reader.readexactly(1)
 			length = int.from_bytes(t, byteorder = 'big', signed = False)
-			t = await read_or_exc(reader,length, timeout = timeout)
+			t = await reader.readexactly(length)
 			rep.DST_ADDR = t.decode()
 
-		t = await read_or_exc(reader,2, timeout = timeout)
+		t = await reader.readexactly(2)
 		rep.DST_PORT = int.from_bytes(t, byteorder = 'big', signed = False)
 		return rep
 
