@@ -32,7 +32,7 @@ class SOCKSClient:
 			while True:
 				data = await asyncio.wait_for(
 					in_stream.read(buffer_size),
-					timeout = timeout
+					timeout = None
 				)
 				if data == b'':
 					logger.debug('Stream channel broken!')
@@ -73,7 +73,7 @@ class SOCKSClient:
 			while True:
 				data = await asyncio.wait_for(
 					reader.read(buffer_size),
-					timeout = timeout
+					timeout = None
 				)
 				if data == b'':
 					logger.debug('proxy_queue_out endpoint disconncted!')
