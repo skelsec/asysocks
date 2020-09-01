@@ -240,7 +240,7 @@ def main():
 
 	import argparse
 
-	parser = argparse.ArgumentParser(description='SOCKS/HTTP proxy port scanner')
+	parser = argparse.ArgumentParser(description='SOCKS5 proxy auth bruteforcer')
 	parser.add_argument('proxy_connection_string', help='connection string decribing the socks5 proxy server connection properties')
 	parser.add_argument('-u', '--users', action='append', help='User or users file with one user per line. can be stacked')
 	parser.add_argument('-p', '--passwords', action='append', help='Password or password file with one password per line. can be stacked')

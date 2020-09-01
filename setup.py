@@ -50,6 +50,9 @@ setup(
 	entry_points={
 		'console_scripts': [
 			'asysockstunnel = asysocks.examples.sockstunnel:main',
+			'asysockssec = asysocks.examples.sockssec:main',
+			'asysocksbrute = asysocks.examples.socksbrute:main',
+			'asysocksportscan = asysocks.examples.socksportscan:main',
 		],
 	}
 )
