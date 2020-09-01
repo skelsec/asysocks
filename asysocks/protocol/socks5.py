@@ -32,17 +32,25 @@ class SOCKS5AddressType(enum.Enum):
 
 
 class SOCKS5ReplyType(enum.Enum):
-	SUCCEEDED = 0X00 # o  X'00' succeeded
+	SUCCEEDED = 0x00 # o  X'00' succeeded
 	FAILURE = 0x01 # o  X'01' general SOCKS server failure
-	CONN_NOT_ALLOWED = 0x02#         o  X'02' connection not allowed by ruleset
+	CONN_NOT_ALLOWED = 0x02 #         o  X'02' connection not allowed by ruleset
 	NETWORK_UNREACHABLE = 0x03 #o  X'03' Network unreachable
-	HOST_UNREACHABLE = 0x04#o  X'04' Host unreachable
+	HOST_UNREACHABLE = 0x04 #o  X'04' Host unreachable
 	CONN_REFUSED = 0x05 #o  X'05' Connection refused
 	TTL_EXPIRED = 0x06 #o  X'06' TTL expired
 	COMMAND_NOT_SUPPORTED = 0x07 #o  X'07' Command not supported
 	ADDRESS_TYPE_NOT_SUPPORTED = 0x08 #o  X'08' Address type not supported
 	#o  X'09' to X'FF' unassigned
 
+class SOCKS5ServerErrorReply(Exception):
+	def __init__(self, reply):
+		self.reply = reply
+	def __str__(self):
+		return self.reply.name
+
+class SOCKS5AuthFailed(Exception):
+	pass
 
 class SOCKS5SocketParser:
 	def __init__(self, protocol = socket.SOCK_STREAM):
@@ -132,6 +140,31 @@ class SOCKS5PlainCredentials:
 		self.username = username
 		self.password = password
 
+class SOCKS5PlainAuthReply:
+	def __init__(self):
+		self.VER = None
+		self.STATUS = None
+
+	@staticmethod
+	async def from_streamreader(reader):
+		rep = SOCKS5PlainAuthReply()
+		t = await reader.read(1)
+		rep.VER = int.from_bytes(t, byteorder = 'big', signed = False)
+		t = await reader.read(1)
+		rep.STATUS = SOCKS5ReplyType(int.from_bytes(t, byteorder = 'big', signed = False))
+
+		return rep
+
+	@staticmethod
+	def from_bytes(data):
+		return SOCKS5PlainAuthReply.from_buffer(io.BytesIO(data))
+	
+	@staticmethod
+	def from_buffer(buff):
+		rep = SOCKS5PlainAuthReply()
+		rep.VER = int.from_bytes(buff.read(1), byteorder = 'big', signed = False)
+		rep.STATUS = SOCKS5ReplyType(int.from_bytes(buff.read(1), byteorder = 'big', signed = False))
+		return rep 
 
 class SOCKS5PlainAuth:
 	def __init__(self):
@@ -175,7 +208,7 @@ class SOCKS5PlainAuth:
 	@staticmethod
 	def construct(username, password):
 		auth = SOCKS5PlainAuth()
-		auth.VER    = 5
+		auth.VER    = 1
 		auth.ULEN   = len(username)
 		auth.UNAME  = username
 		auth.PLEN   = len(password)

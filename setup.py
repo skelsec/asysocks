@@ -47,9 +47,9 @@ setup(
 	),
 	install_requires=[
 	],
-	#entry_points={
-	#	'console_scripts': [
-	#		'asysocks = asysocks.examples.asysocks:main',
-	#	],
-	#}
+	entry_points={
+		'console_scripts': [
+			'asysockstunnel = asysocks.examples.sockstunnel:main',
+		],
+	}
 )
