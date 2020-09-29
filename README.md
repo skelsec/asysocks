@@ -28,7 +28,7 @@ TBD
 ## tools
 These are built-in examples showing the capabilities of the library and to be used as code snipplets on setting up classes.
 ### asysockstunnel
-
+Creates a listening server on localhost and tunnels all incoming connections to a pre-specified destination via a pre-defined proxy server.
 ### asysockssec
 SOCKS4/SOCKS5 server security tester
 ### asysocksbrute
