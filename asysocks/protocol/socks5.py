@@ -457,9 +457,9 @@ class SOCKS5Request:
 
 class SOCKS5Reply:
 	def __init__(self):
-		self.VER = None
+		self.VER = 5
 		self.REP = None
-		self.RSV = None
+		self.RSV = 0
 		self.ATYP = None
 		self.BIND_ADDR= None
 		self.BIND_PORT= None

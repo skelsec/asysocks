@@ -47,7 +47,7 @@ class SOCKS4Request:
 		o.CD = SOCKS4CDCode(int.from_bytes(buff.read(1), byteorder = 'big', signed = False))
 		o.DSTPORT = int.from_bytes(buff.read(2), byteorder = 'big', signed = False)
 		o.DSTIP = ipaddress.IPv4Address(buff.read(4))
-		o.USERID = ''
+		o.USERID = b''
 		for _ in range(SOCKS4_USERID_MAC_LEN):
 			x = buff.read(1)
 			if x == 0:

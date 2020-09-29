@@ -53,6 +53,7 @@ setup(
 			'asysockssec = asysocks.examples.sockssec:main',
 			'asysocksbrute = asysocks.examples.socksbrute:main',
 			'asysocksportscan = asysocks.examples.socksportscan:main',
+			'asysocksproxy = asysocks.examples.socksserver:main',
 		],
 	}
 )

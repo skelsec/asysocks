@@ -1,2 +1,2 @@
 # asysocks
-Socks5 / Socks4 client and server library
+Socks5 / Socks4 / HTTP proxy client and server library
