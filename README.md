@@ -26,11 +26,17 @@ It also comes with a clever way to deal with intercepting traffic, see the `Prox
 TBD
 
 ## tools
+These are built-in examples showing the capabilities of the library and to be used as code snipplets on setting up classes.
 ### asysockstunnel
+
 ### asysockssec
+SOCKS4/SOCKS5 server security tester
 ### asysocksbrute
+SOCKS5 authentication bruteforcer.
 ### asysocksportscan
+Quick port scaning via SOCKS4/SOCKS5/HTTP proxies
 ### asysocksproxy
+SOCKS4/SOCKS5/HTTP proxy server. Supports basic monitoring of traffic flow.
 
 ## Known issues/limitations
 The biggest limitation at the moment is the lack of SSL support on server side intercepting and the same issue exists on the client side when dealing with delegated queues. Reason is that I still can't find a way to wrap arbitarary data in/out streams with python's built-in `ssl` module. Hope this will change in the future.
