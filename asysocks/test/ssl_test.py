@@ -22,6 +22,15 @@ async def amain():
 
 		args = parser.parse_args()
 
+		####
+		####
+		fake_cert = 'asysocks/test/cert.pem'
+		fake_key = 'asysocks/test/key.pem'
+		fake_pass = 'testcert'
+
+		####
+
+
 		if args.silent is False:
 			print(__banner__)
 
@@ -62,13 +71,22 @@ async def amain():
 			while True:
 				#each connection will give a monitor class
 				monitor = await monitor_dispatch_q.get()
-				#if monitor.dst_port == 443:
-				#	client_ssl_ctx = ssl.create_default_context()
-				#	destination_ssl_ctx = destination_ssl_ctx
-				#	ssl_monitor = ProxyMonitorSSL(monitor, client_ssl_ctx = client_ssl_ctx, destination_ssl_ctx = destination_ssl_ctx)
-				#	asyncio.create_task(ssl_monitor.intercept())
-				#else:
-				asyncio.create_task(monitor.just_log())
+				if monitor.dst_port == 443:
+					client_ssl_ctx = ssl.create_default_context()
+					client_ssl_ctx.check_hostname = False
+					client_ssl_ctx.verify_mode = ssl.CERT_NONE
+					
+					print(client_ssl_ctx.verify_mode)
+					client_ssl_ctx.load_cert_chain(fake_cert, fake_key, password=fake_pass)
+					
+					destination_ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+					destination_ssl_ctx.check_hostname = False
+					destination_ssl_ctx.verify_mode = ssl.CERT_NONE
+					destination_ssl_ctx.set_ciphers('DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDHE-ECDSA-AES128-GCM-SHA256:TLS_AES_128_GCM_SHA256')
+					ssl_monitor = ProxyMonitorSSL(monitor, client_ssl_ctx = client_ssl_ctx, destination_ssl_ctx = destination_ssl_ctx)
+					asyncio.create_task(ssl_monitor.intercept())
+				else:
+					asyncio.create_task(monitor.just_log())
 
 			server_task.cancel()
 

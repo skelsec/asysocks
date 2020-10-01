@@ -3,6 +3,7 @@ import logging
 import asyncio
 import socket
 import copy
+import ssl
 import ipaddress
 from urllib.parse import urlparse
 
@@ -20,11 +21,253 @@ handler.setFormatter(formatter)
 srvlogger.addHandler(handler)
 srvlogger.setLevel(logging.INFO)
 
+class ProxyMonitorSSL:
+	def __init__(self, monitor, client_ssl_ctx = None, destination_ssl_ctx = None):
+		self.monitor = monitor
+		self.client_ssl_ctx = client_ssl_ctx
+		self.destination_ssl_ctx = destination_ssl_ctx
+
+		self.stop_evt = asyncio.Event()
+		self.client_ssl_ok_evt = asyncio.Event()
+		self.destination_ssl_ok_evt = asyncio.Event()
+		self.client_tls_obj = None
+		self.client_tls_in_buff = None
+		self.client_tls_out_buff = None
+		self.destination_tls_obj = None
+		self.destination_tls_in_buff = None
+		self.destination_tls_out_buff = None
+
+		self.__client_ssl_in_q = asyncio.Queue()
+		self.__destination_ssl_in_q = asyncio.Queue()
+
+		self.c2d_ssl_task = None
+		self.d2c_ssl_task = None
+		self.dest_task = None
+		self.client_task = None
+
+	async def __read_ssl_record(self, raw_in_q, ssl_in_q):
+		try:
+			buffer = b''
+			length = None
+			while not self.stop_evt.is_set():
+				
+				if length is None and len(buffer) >= 6:
+					length = int.from_bytes(buffer[3:5], byteorder = 'big', signed = False)
+				
+				if length is not None and len(buffer) >= length + 5:
+					print('LB raw %s' % len(buffer[:length+5]))
+					await ssl_in_q.put(buffer[:length+5])
+					buffer = buffer[length+5:]
+					length = None
+					continue
+				
+				data = await raw_in_q.get()
+				if data == b'':
+					await ssl_in_q.put(b'')
+					return
+				buffer+= data
+				
+
+		except asyncio.CancelledError:
+			return
+
+		except Exception as e:
+			print('__read_ssl_record %s' % e)
+			await ssl_in_q.put(b'')
+
+		#finally:
+		#	self.stop_evt.set()
+
+	async def __do_ssl_handshake_cli(self, ssl_ctx, in_q, out_q):
+		try:
+			tls_in_buff = ssl.MemoryBIO()
+			tls_out_buff = ssl.MemoryBIO()
+			tls_obj = ssl_ctx.wrap_bio(tls_in_buff, tls_out_buff, server_side=False, server_hostname = self.monitor.dst_hostname)
+			print('################## %s' % self.monitor.dst_ip)
+
+			ctr = 0
+			while not self.stop_evt.is_set():
+				ctr += 1
+				print('DST Performing handshake!')
+				try:
+					tls_obj.do_handshake()
+				except ssl.SSLWantReadError:
+					print('DST want %s' % ctr)
+					while True:
+						client_hello = tls_out_buff.read()
+						if client_hello != b'':
+							print('DST client_hello %s' % len(client_hello))
+							await out_q.put(client_hello)
+						else:
+							break
+					
+					print('DST wating server hello %s' % ctr)
+					server_hello = await in_q.get()
+					print('DST server_hello %s' % len(server_hello))
+					tls_in_buff.write(server_hello)
+
+					continue
+				except:
+					raise
+				else:
+					print('DST handshake ok %s' % ctr)
+					#server_fin = tls_out_buff.read()
+					#print('DST server_fin %s ' %  server_fin)
+					#await out_q.put(server_fin)
+					break			
+
+			return tls_in_buff, tls_out_buff, tls_obj, None
+
+		except Exception as e:
+			print(e)
+			return None, None, None, e
+
+	async def __do_ssl_handshake_srv(self, ssl_ctx, in_q, out_q):
+		try:
+			tls_in_buff = ssl.MemoryBIO()
+			tls_out_buff = ssl.MemoryBIO()
+			tls_obj = ssl_ctx.wrap_bio(tls_in_buff, tls_out_buff, server_side=True)
+			ctr = 0
+			while not self.stop_evt.is_set():
+				ctr += 1
+				#print('wating client hello %s' % ctr)
+				client_hello = await in_q.get()
+				#print('client_hello %s' % len(client_hello))
+				tls_in_buff.write(client_hello)
+
+				#print('Performing handshake!')
+				try:
+					tls_obj.do_handshake()
+				except ssl.SSLWantReadError:
+					#print('want %s' % ctr)
+					while True:
+						server_hello = tls_out_buff.read()
+						if server_hello != b'':
+							#print('server_hello %s' % len(server_hello))
+							await out_q.put(server_hello)
+						else:
+							break
+					continue
+				except:
+					raise
+				else:
+					#print('handshake ok %s' % ctr)
+					while True:
+						server_fin = tls_out_buff.read()
+						if server_fin != b'':
+							await out_q.put(server_fin)
+						else:
+							break
+
+					break			
+
+			return tls_in_buff, tls_out_buff, tls_obj, None
+
+		except Exception as e:
+			#print(e)
+			return None, None, None, e
+
+
+	async def __client_ssl_endpoint(self):
+		try:
+			self.client_tls_in_buff, self.client_tls_out_buff, self.client_tls_obj, err = await self.__do_ssl_handshake_srv(self.client_ssl_ctx, self.__client_ssl_in_q, self.monitor.d2c_out)
+			if err is not None:
+				raise err
+			print('CLIENT Handshake OK!')
+			self.client_ssl_ok_evt.set()
+			await self.destination_ssl_ok_evt.wait()
+			while not self.stop_evt.is_set():
+				client_ssl_data = await self.__client_ssl_in_q.get()
+				if client_ssl_data == b'':
+					print('Connection terminated')
+					return
+				self.client_tls_in_buff.write(client_ssl_data)
+				while True:
+					try:
+						client_data = self.client_tls_obj.read()
+					except ssl.SSLWantReadError:
+						break
+					print('client_data %s' % client_data)
+					self.destination_tls_obj.write(client_data)
+
+				while True:
+					client_ssl_data = self.destination_tls_out_buff.read()
+					if client_ssl_data == b'':
+						break
+					await self.monitor.c2d_out.put(client_ssl_data)
+
+		except Exception as e:
+			print('CLIENT error: %s' % e)
+			return None, None, None, e
+		
+		finally:
+			self.stop_evt.set()
+			self.client_ssl_ok_evt.set()
+			self.destination_ssl_ok_evt.set()
+			await self.monitor.c2d_out.put(b'')
+			self.c2d_ssl_task.cancel()
+			self.d2c_ssl_task.cancel()
+			self.dest_task.cancel()
+
+	async def __destination_ssl_endpoint(self):
+		try:
+			self.destination_tls_in_buff, self.destination_tls_out_buff, self.destination_tls_obj, err = await self.__do_ssl_handshake_cli(self.client_ssl_ctx, self.__destination_ssl_in_q, self.monitor.c2d_out)
+			if err is not None:
+				raise err
+			self.destination_ssl_ok_evt.set()
+			await self.client_ssl_ok_evt.wait()
+			print('DST Handshake OK!')
+			while not self.stop_evt.is_set():
+				destination_ssl_data = await self.__destination_ssl_in_q.get()
+				if destination_ssl_data == b'':
+					print('Connection terminated')
+					return
+				print('destination_ssl_data : %s' % len(destination_ssl_data))
+				self.destination_tls_in_buff.write(destination_ssl_data)
+				while True:
+					try:
+						destination_data = self.destination_tls_obj.read()
+					except ssl.SSLWantReadError:
+						break
+					print('destination_data %s' % destination_data)
+					self.client_tls_obj.write(destination_data)
+					
+				while True:
+					destination_ssl_data = self.client_tls_out_buff.read()
+					if destination_ssl_data == b'':
+						break
+					await self.monitor.d2c_out.put(destination_ssl_data)
+
+		except Exception as e:
+			print(type(e))
+			print('DST error: %s' % e)
+			return None, None, None, e
+
+		finally:
+			self.stop_evt.set()
+			self.client_ssl_ok_evt.set()
+			self.destination_ssl_ok_evt.set()
+			await self.monitor.d2c_out.put(b'')
+			self.c2d_ssl_task.cancel()
+			self.d2c_ssl_task.cancel()
+			self.client_task.cancel()
+
+
+	
+	async def intercept(self):
+		self.c2d_ssl_task = asyncio.create_task(self.__read_ssl_record(self.monitor.c2d_in, self.__client_ssl_in_q))
+		self.d2c_ssl_task = asyncio.create_task(self.__read_ssl_record(self.monitor.d2c_in, self.__destination_ssl_in_q))
+		self.dest_task = asyncio.create_task(self.__destination_ssl_endpoint())
+		self.client_task = asyncio.create_task(self.__client_ssl_endpoint())
+		await self.stop_evt.wait()
+
+
 class ProxyMonitor:
 	def __init__(self, client_ip, client_port, dst_ip, dst_port, module):
 		self.client_ip = client_ip
 		self.client_port = client_port
 		self.dst_ip = dst_ip
+		self.dst_hostname = None
 		self.dst_port = dst_port
 		self.module = module
 		self.logline_c2d = '[%s][MONITOR][%s:%s -> %s:%s]' % (self.module, self.client_ip, self.client_port, self.dst_ip, self.dst_port)
@@ -34,6 +277,10 @@ class ProxyMonitor:
 		self.c2d_out = asyncio.Queue()
 		self.d2c_in = asyncio.Queue()
 		self.d2c_out = asyncio.Queue()
+
+	def set_hostname(self, hostname):
+		#for SNI support on SSL
+		self.dst_hostname = hostname
 
 	async def __justlog_c2d(self, stop_evt):
 		try:
@@ -82,19 +329,39 @@ class SOCKSServer:
 		self.monitor_dispatch_q = monitor_dispatch_q
 
 	async def __proxy(self, reader_a, writer_b, stop_evt, src_module, monitor_in_q = None, monitor_out_q = None):
+		async def pi(reader, in_q, buffer_size):
+			try:
+				while not stop_evt.is_set():
+					data = await reader_a.read(buffer_size)					
+					if data == b'' or data is None:
+						await in_q.put(data)
+						return
+					await in_q.put(data)
+			except:
+				return
+			finally:
+				stop_evt.set()
+		
 		try:
-			while not stop_evt.is_set():
-				data = await reader_a.read(self.buffer_size)
-				if monitor_in_q is not None:
-					await monitor_in_q.put(data)
-				if monitor_out_q is not None:
+			if monitor_in_q is not None:
+				asyncio.create_task(pi(reader_a, monitor_in_q, self.buffer_size))
+				while not stop_evt.is_set():
 					data = await monitor_out_q.get()
-				
-				if data == b'' or data is None:
-					return
+					#print('data_modded %s' % data)
+					if data == b'' or data is None:
+						return
 
-				writer_b.write(data)
-				await writer_b.drain()
+					writer_b.write(data)
+					await writer_b.drain()
+
+			else:
+				while not stop_evt.is_set():
+					data = await reader_a.read(self.buffer_size)					
+					if data == b'' or data is None:
+						return
+
+					writer_b.write(data)
+					await writer_b.drain()
 		except asyncio.CancelledError:
 			return
 		except Exception as e:
@@ -243,6 +510,8 @@ class SOCKSServer:
 					rem_ip, rem_port = dst_writer.get_extra_info('peername')
 					client_ip, client_port = writer.get_extra_info('peername')
 					monitor = ProxyMonitor(client_ip, client_port, rem_ip, rem_port, 'SOCKS5')
+					if req.ATYP == SOCKS5AddressType.DOMAINNAME:
+						monitor.set_hostname(str(req.DST_ADDR))
 					await self.monitor_dispatch_q.put(monitor)
 					c2d_in = monitor.c2d_in
 					c2d_out = monitor.c2d_out
@@ -352,6 +621,7 @@ class SOCKSServer:
 				rem_ip, rem_port = dst_writer.get_extra_info('peername')
 				client_ip, client_port = writer.get_extra_info('peername')
 				monitor = ProxyMonitor(client_ip, client_port, rem_ip, rem_port, 'HTTPCONNECT')
+				monitor.set_hostname(host)
 				await self.monitor_dispatch_q.put(monitor)
 				c2d_in = monitor.c2d_in
 				c2d_out = monitor.c2d_out
@@ -398,6 +668,7 @@ class SOCKSServer:
 				rem_ip, rem_port = dst_writer.get_extra_info('peername')
 				client_ip, client_port = writer.get_extra_info('peername')
 				monitor = ProxyMonitor(client_ip, client_port, rem_ip, rem_port, 'HTTPCONNECT')
+				monitor.set_hostname(host)
 				await self.monitor_dispatch_q.put(monitor)
 				await monitor.c2d_in.put(c_cmd.to_bytes())
 				data = await monitor.c2d_out.get()
