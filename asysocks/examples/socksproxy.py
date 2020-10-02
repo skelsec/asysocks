@@ -2,7 +2,9 @@
 import asyncio
 import logging
 import ssl
-from asysocks.server import SOCKSServer, srvlogger, ProxyMonitorSSL
+from asysocks.server import SOCKSServer, srvlogger
+from asysocks.intercepting.server import InterceptServer
+from asysocks.certmanager import CertManager
 from asysocks._version import __banner__
 
 async def amain():
@@ -40,7 +42,8 @@ async def amain():
 
 		
 		if args.monitor is True:
-			monitor_dispatch_q = asyncio.Queue()
+			certmanager = CertManager()
+			log_queue = asyncio.Queue()
 		
 		server = SOCKSServer(
 			args.listen_ip, 
@@ -48,29 +51,23 @@ async def amain():
 			ssl_ctx, 
 			client_timeout = client_timeout, 
 			buffer_size = buffer_size, 
-			supported_protocols = supported_protocols, 
-			monitor_dispatch_q=monitor_dispatch_q
+			supported_protocols = supported_protocols
 		)
+
+		if args.monitor is True:
+			server = InterceptServer(server, certmanager, log_queue)
+			asyncio.create_task(server.run())
 
 		if args.silent is False:
 			print('Proxy server is up and running on %s:%s %s' % (args.listen_ip, args.listen_port, '' if ssl_ctx is None else '(SSL)'))
 		
-		if monitor_dispatch_q is None:
-			await server.run()
-		else:
-			server_task = asyncio.create_task(server.run())
+		if args.monitor is True:
 			while True:
-				#each connection will give a monitor class
-				monitor = await monitor_dispatch_q.get()
-				#if monitor.dst_port == 443:
-				#	client_ssl_ctx = ssl.create_default_context()
-				#	destination_ssl_ctx = destination_ssl_ctx
-				#	ssl_monitor = ProxyMonitorSSL(monitor, client_ssl_ctx = client_ssl_ctx, destination_ssl_ctx = destination_ssl_ctx)
-				#	asyncio.create_task(ssl_monitor.intercept())
-				#else:
-				asyncio.create_task(monitor.just_log())
-
-			server_task.cancel()
+				trafficlog = await log_queue.get()
+				print(str(trafficlog))
+		
+		else:
+			await server.run()
 
 	except Exception as e:
 		print(e)
