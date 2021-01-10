@@ -1,7 +1,15 @@
 
 import asyncio
 import logging
-import ssl
+
+import platform
+try:
+	import ssl
+except:
+	if platform.system() == 'Emscripten':
+		#pyodide doesnt support SSL for now.
+		pass
+
 from asysocks.server import SOCKSServer, srvlogger
 from asysocks.intercepting.server import InterceptServer
 from asysocks.certmanager import CertManager
@@ -9,7 +17,6 @@ from asysocks._version import __banner__
 
 async def amain():
 	try:
-		import ssl
 		import argparse
 		parser = argparse.ArgumentParser(description='Universal proxy server (SOCKS4/5 and HTTP proxy')
 		parser.add_argument('--listen-ip', default = '127.0.0.1', help='Listen IP')

@@ -1,5 +1,13 @@
 import asyncio
-import ssl
+
+import platform
+try:
+	import ssl
+except:
+	if platform.system() == 'Emscripten':
+		#pyodide doesnt support SSL for now.
+		pass
+
 
 import logging
 
@@ -41,8 +49,8 @@ class SSLBaseMonitor:
 		self.d2c_in = asyncio.Queue()
 		self.d2c_out = asyncio.Queue()
 
-	def get_trafficlog(self, data, direction):
-		t = self.monitor.get_trafficlog(data, direction)
+	def get_trafficlog(self, data, direction, module_name = None):
+		t = self.monitor.get_trafficlog(data, direction, module_name = module_name)
 		t.is_ssl = True
 		return t
 
@@ -202,7 +210,10 @@ class SSLBaseMonitor:
 			asyncio.create_task(self.__read_dec(self.__client_ssl_in_q, self.c2d_in, self.client_tls_in_buff, self.client_tls_obj))
 			while not self.stop_evt.is_set():
 				client_data_buff = await self.c2d_out.get()
-				print('client_data %s' % client_data_buff)
+				if client_data_buff == b'':
+					await self.monitor.c2d_out.put(client_data_buff)
+					break
+				#print('client_data %s' % client_data_buff)
 				self.destination_tls_obj.write(client_data_buff)
 				while True:
 					client_ssl_data = self.destination_tls_out_buff.read()
@@ -236,9 +247,11 @@ class SSLBaseMonitor:
 			asyncio.create_task(self.__read_dec(self.__destination_ssl_in_q, self.d2c_in, self.destination_tls_in_buff, self.destination_tls_obj))
 			while not self.stop_evt.is_set():
 				destination_data_buff = await self.d2c_out.get()
+				if destination_data_buff == b'':
+					await self.monitor.d2c_out.put(destination_data_buff)
+					break
 				print('destination_data %s' % destination_data_buff)
 				self.client_tls_obj.write(destination_data_buff)
-				destination_data_buff = b''
 					
 				while True:
 					destination_ssl_data = self.client_tls_out_buff.read()

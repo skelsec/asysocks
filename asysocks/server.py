@@ -3,9 +3,16 @@ import logging
 import asyncio
 import socket
 import copy
-import ssl
 import ipaddress
 from urllib.parse import urlparse
+import platform
+
+try:
+	import ssl
+except:
+	if platform.system() == 'Emscripten':
+		#pyodide doesnt support SSL for now.
+		pass
 
 from asysocks.common.constants import SocksServerVersion, SocksCommsMode
 from asysocks.protocol.http import HTTPRequest

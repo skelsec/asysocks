@@ -16,12 +16,13 @@ class RawLoggingMonitor:
 	def __init__(self, monitor, log_queue, c2d_in = None, c2d_out = None, d2c_in = None, d2c_out = None):
 		self.monitor = monitor
 		self.log_queue = log_queue
+		self.module_name = 'RAWLOG'
 
 	async def __justlog_c2d(self, stop_evt):
 		try:
 			while not stop_evt.is_set():
 				data = await self.monitor.c2d_in.get()
-				await self.log_queue.put(self.monitor.get_trafficlog(data, 'c2d_in'))
+				await self.log_queue.put(self.monitor.get_trafficlog(data, 'c2d_in', self.module_name))
 				await self.monitor.c2d_out.put(data)
 				if data == b'':
 					return
@@ -34,7 +35,7 @@ class RawLoggingMonitor:
 		try:
 			while not stop_evt.is_set():
 				data = await self.monitor.d2c_in.get()
-				await self.log_queue.put(self.monitor.get_trafficlog(data, 'd2c_in'))
+				await self.log_queue.put(self.monitor.get_trafficlog(data, 'd2c_in', self.module_name))
 				await self.monitor.d2c_out.put(data)
 				if data == b'':
 					return

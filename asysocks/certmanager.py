@@ -1,13 +1,20 @@
 
 import os
 import asyncio
-import ssl
 import datetime
 import uuid
 import glob
 import tempfile
 import logging
 import hashlib
+
+import platform
+try:
+	import ssl
+except:
+	if platform.system() == 'Emscripten':
+		#pyodide doesnt support SSL for now.
+		pass
 
 
 from cryptography import x509
@@ -93,10 +100,13 @@ class CertManager:
 		self.ca_key = serialization.load_pem_private_key(ca_key, self.ca_key_file_pw, backend=default_backend())
 
 
-	def store_to_cache(self, new_cert, new_key):
+	def store_to_cache(self, new_cert, new_key, hostname = None):
 		cert = x509.load_pem_x509_certificate(new_cert, default_backend())
 		
-		bname = '%s_%s' % (cert.serial_number, hashlib.sha1(cert.subject.rfc4514_string().encode()).hexdigest())
+		if hostname is not None:
+			bname = bname = '%s_%s' % (cert.serial_number, hostname)
+		else:
+			bname = '%s_%s' % (cert.serial_number, hashlib.sha1(cert.subject.rfc4514_string().encode()).hexdigest())
 		cname = '%s_%s.pem' % (bname, 'cert')
 		kname = '%s_%s.pem' % (bname, 'key')
 
@@ -108,9 +118,10 @@ class CertManager:
 
 		return os.path.join(self.cache_dir, cname), os.path.join(self.cache_dir, kname)
 
-	def load_from_cache(self, cert_der_data = None, serial = None, subject = None, ret_file_path = True):
+	def load_from_cache(self, hostname = None, cert_der_data = None, serial = None, subject = None, ret_file_path = True):
 		cert_filename = None
 		key_filename = None
+
 
 		if cert_der_data is not None:
 			cert = x509.load_der_x509_certificate(cert_der_data, default_backend())
@@ -124,7 +135,14 @@ class CertManager:
 					key_filename = filename
 				elif basename.endswith('_cert.pem'):
 					cert_filename = filename
-		
+
+			elif hostname is not None and basename.find('_%s_' % hostname) != -1:
+				if basename.endswith('_key.pem'):
+					key_filename = filename
+				elif basename.endswith('_cert.pem'):
+					cert_filename = filename
+
+
 		if cert_filename is None or key_filename is None:
 			return None, None
 		
@@ -159,6 +177,7 @@ class CertManager:
 				not_valid_before=old_cert.not_valid_before,
 				not_valid_after=old_cert.not_valid_after,
 			)
+			# TODO: add extensions as well maybe
 			#for x in old_cert.extensions:
 			#	print(type(x))
 			#	builder.add_extension(x, x.critical)
@@ -179,6 +198,12 @@ class CertManager:
 	
 	async def get_cert_by_host(self, hostname, port = 443, ssl_ctx = None):
 		try:
+			
+			certfile, keyfile = self.load_from_cache(hostname=hostname)
+			if certfile is not None:
+				logger.debug('Cache hit for %s' % hostname)
+				return certfile, keyfile, None
+
 			cert, err = await CertManager.fetch_remote_cert(hostname, port, ssl_ctx=ssl_ctx)
 			if err is not None:
 				raise err

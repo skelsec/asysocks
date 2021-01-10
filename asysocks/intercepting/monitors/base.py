@@ -34,8 +34,9 @@ class BaseMonitor:
 		self.d2c_in = asyncio.Queue()
 		self.d2c_out = asyncio.Queue()
 
-	def get_trafficlog(self, data, direction):
+	def get_trafficlog(self, data, direction, module_name = None):
 		t = TrafficLog()
+		t.module_name = module_name
 		t.srv_module = self.module
 		t.client_ip = self.client_ip
 		t.client_port = self.client_port

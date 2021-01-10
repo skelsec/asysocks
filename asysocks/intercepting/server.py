@@ -3,7 +3,15 @@ import asyncio
 import logging
 import json
 import re
-import ssl
+
+import platform
+try:
+	import ssl
+except:
+	if platform.system() == 'Emscripten':
+		#pyodide doesnt support SSL for now.
+		pass
+
 
 from asysocks.intercepting.monitors import prototable
 from asysocks.intercepting.monitors.sslbase import SSLBaseMonitor
