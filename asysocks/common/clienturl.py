@@ -126,6 +126,9 @@ class SocksClientURL:
 			res.server_port = 1080
 		elif res.version == SocksServerVersion.SOCKS4S:
 			res.server_port = 1080
+		elif res.version == SocksServerVersion.SOCKS4A:
+			res.server_port = 1080
+			
 		res.username = url_e.username
 		res.password = url_e.password
 		if res.version in sockssslversions:

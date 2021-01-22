@@ -1,4 +1,5 @@
 
+import os
 from urllib.parse import urlparse, parse_qs
 from asysocks.common.constants import SocksServerVersion, SocksProtocol
 
@@ -13,10 +14,13 @@ class SocksTarget:
 		self.timeout = 10 #used to create the connection
 		self.buffer_size = 4096
 		self.ssl_ctx = None
+		self.userid = os.urandom(4).hex().encode('ascii')
 		
 		self.endpoint_ip = None
 		self.endpoint_port = None
 		self.endpoint_timeout = None #used after the connection is made
+
+		self.network = 'SOCKET'
 
 		self.only_open = False #These params used for security testing only! 
 		self.only_auth = False #These params used for security testing only!
