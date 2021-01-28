@@ -21,11 +21,17 @@ class SocksTarget:
 		self.endpoint_timeout = None #used after the connection is made
 
 		self.network = 'SOCKET'
+		self.credential = None
 
 		self.only_open = False #These params used for security testing only! 
 		self.only_auth = False #These params used for security testing only!
 		self.only_bind = False #These params used for security testing only!
-		
+	
+	def get_sname(self):
+		return '%s:%s' % (self.server_ip, self.server_port)
+
+	def get_tname(self):
+		return '%s:%s' % (self.endpoint_ip, self.endpoint_port)
 
 	def __repr__(self):
 		return str(self.__dict__)

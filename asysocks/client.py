@@ -10,17 +10,17 @@ from asysocks.protocol.socks4a import SOCKS4ARequest, SOCKS4AReply, SOCKS4ACDCod
 from asysocks.protocol.socks5 import SOCKS5Method, SOCKS5Nego, SOCKS5NegoReply, SOCKS5Request, SOCKS5Reply, SOCKS5ReplyType, SOCKS5PlainAuth, SOCKS5PlainAuthReply, SOCKS5ServerErrorReply, SOCKS5AuthFailed
 
 
+class SocksTunnelError(Exception):
+	def __init__(self, innerexception, message="Something failed setting up the tunnel! See innerexception for more details"):
+		self.innerexception = innerexception
+		self.message = message
+		super().__init__(self.message)
 
 class SOCKSClient:
-	def __init__(self, comms, target, credentials = None, bind_evt = None, channel_open_evt = None):
-		if isinstance(target, list) is False:
-			target = [target]
-		self.target = target
-		if credentials is None or len(credentials) == 0:
-			credentials = [None] * len(self.target)
-		if len(credentials) != len(self.target):
-			raise Exception('Credentials must be either None or a list of credentials for each target')
-		self.credentials = credentials
+	def __init__(self, comms, proxies, bind_evt = None, channel_open_evt = None):
+		self.proxies = proxies
+		if isinstance(proxies, list) is False:
+			self.proxies = [proxies]
 		self.comms = comms
 		self.server_task = None
 		self.proxytask_in = None
@@ -53,6 +53,15 @@ class SOCKSClient:
 				for task in finished_tasks:
 					result = await task
 					if result is True:
+						try:
+							for pt in pending_tasks:
+								last_data =	await asyncio.wait_for(pt, timeout = 0.5) 
+						except:
+							pass
+						else:
+							if last_data != b'':
+								out_stream.write(result)
+								await out_stream.drain()
 						logger.debug('other side disconnected!')
 						return
 					else:
@@ -61,6 +70,8 @@ class SOCKSClient:
 							return
 						out_stream.write(result)
 						await out_stream.drain()
+						for pt in pending_tasks:
+							pt.cancel()
 		except asyncio.CancelledError:
 			return
 		except asyncio.TimeoutError:
@@ -68,6 +79,7 @@ class SOCKSClient:
 		except Exception as e:
 			logger.debug('proxy_stream err: %s' % str(e))
 		finally:
+			out_stream.close()
 			proxy_stopped_evt.set()
 
 	@staticmethod
@@ -117,11 +129,11 @@ class SOCKSClient:
 			proxy_stopped_evt.set()
 	
 
-	async def run_http(self, target, credential, remote_reader, remote_writer, timeout = None):		
+	async def run_http(self, proxy, remote_reader, remote_writer, timeout = None):		
 		try:
 			print('!!!!! __http_auth is not resolved !!!!')
-			logger.debug('[HTTP] Opening channel to %s:%s' % (target.endpoint_ip, target.endpoint_port))
-			connect_cmd = 'CONNECT %s:%s HTTP/1.1\r\nHost: %s:%s\r\n' % (target.endpoint_ip, target.endpoint_port, target.endpoint_ip, target.endpoint_port)
+			logger.debug('[HTTP] Opening channel to %s:%s' % (proxy.endpoint_ip, proxy.endpoint_port))
+			connect_cmd = 'CONNECT %s:%s HTTP/1.1\r\nHost: %s:%s\r\n' % (proxy.endpoint_ip, proxy.endpoint_port, proxy.endpoint_ip, proxy.endpoint_port)
 			connect_cmd = connect_cmd.encode()
 
 			__http_auth = None
@@ -142,7 +154,7 @@ class SOCKSClient:
 				elif resp.status == 407:
 					logger.debug('[HTTP] Server proxy auth required!')
 
-					if credential is None:
+					if proxy.credential is None:
 						raise Exception('HTTP proxy auth required but no credential set!')
 					
 					auth_type = resp.headers_upper.get('PROXY-AUTHENTICATE', None)
@@ -155,7 +167,7 @@ class SOCKSClient:
 					return False, HTTPProxyAuthRequiredException()
 			
 			elif __http_auth == 'BASIC':
-				auth_data = base64.b64encode(('%s:%s' % (credential.username, credential.password) ).encode() )
+				auth_data = base64.b64encode(('%s:%s' % (proxy.credential.username, proxy.credential.password) ).encode() )
 				auth_connect = connect_cmd + b'Proxy-Authorization: Basic ' + auth_data + b'\r\n'
 				remote_writer.write(auth_connect + b'\r\n')
 				await asyncio.wait_for(remote_writer.drain(), timeout = timeout)
@@ -179,16 +191,15 @@ class SOCKSClient:
 			logger.debug('run_http')
 			return False, e
 
-	async def run_socks4(self, target, credential, remote_reader, remote_writer, timeout = None):
+	async def run_socks4(self, proxy, remote_reader, remote_writer, timeout = None):
 		"""
 		Does the intial "handshake" instructing the remote server to set up the connection to the endpoint
 		"""
 		try:
-			#logger.debug('[SOCKS4] Requesting new channel from remote socks server')
-			logger.debug('[SOCKS4] Opening channel to %s:%s' % (target.endpoint_ip, target.endpoint_port))
-			req = SOCKS4Request.from_target(target)
-			if credential is not None and credential.username is not None:
-				req.USERID = credential.username
+			logger.debug('[SOCKS4 %s:%s] Opening channel to %s:%s (target)' % (proxy.server_ip, proxy.server_port, proxy.endpoint_ip, proxy.endpoint_port))
+			req = SOCKS4Request.from_target(proxy)
+			if proxy.credential is not None and proxy.credential.username is not None:
+				req.USERID = proxy.credential.username
 			remote_writer.write(req.to_bytes())
 			await asyncio.wait_for(remote_writer.drain(), timeout = timeout)
 			rep, err = await asyncio.wait_for(SOCKS4Reply.from_streamreader(remote_reader), timeout = timeout)
@@ -206,15 +217,15 @@ class SOCKSClient:
 			logger.debug('run_socks4')
 			return False, e
 
-	async def run_socks4a(self, target, credential, remote_reader, remote_writer, timeout = None):
+	async def run_socks4a(self, proxy, remote_reader, remote_writer, timeout = None):
 		"""
 		Does the intial "handshake" instructing the remote server to set up the connection to the endpoint
 		"""
 		try:
-			logger.debug('[SOCKS4A] Opening channel to %s:%s' % (target.endpoint_ip, target.endpoint_port))
-			req = SOCKS4ARequest.from_target(target)
-			if credential is not None and credential.username is not None:
-				req.USERID = credential.username
+			logger.debug('[SOCKS4A %s:%s] Opening channel to %s:%s (target)' % (proxy.server_ip, proxy.server_port, proxy.endpoint_ip, proxy.endpoint_port))
+			req = SOCKS4ARequest.from_target(proxy)
+			if proxy.credential is not None and proxy.credential.username is not None:
+				req.USERID = proxy.credential.username
 			remote_writer.write(req.to_bytes())
 			await asyncio.wait_for(remote_writer.drain(), timeout = timeout)
 			rep, err = await asyncio.wait_for(SOCKS4AReply.from_streamreader(remote_reader), timeout = timeout)
@@ -232,19 +243,19 @@ class SOCKSClient:
 			logger.debug('run_socks4a')
 			return False, e
 
-	async def run_socks5(self, target, credential, remote_reader, remote_writer, timeout = None):
+	async def run_socks5(self, proxy, remote_reader, remote_writer, timeout = None):
 		"""
 		Does the intial "handshake" instructing the remote server to set up the connection to the endpoint
 		"""
-		logger.debug('[SOCKS5] invoked')
-		
+		sname = proxy.get_sname()
+		tname = proxy.get_tname()
 		methods = [SOCKS5Method.NOAUTH]
-		if credential is not None and credential.username is not None and credential.password is not None:
-			#methods.append(SOCKS5Method.PLAIN)
-			methods = [SOCKS5Method.PLAIN]
+		if proxy.credential is not None and proxy.credential.username is not None and proxy.credential.password is not None:
+			methods.append(SOCKS5Method.PLAIN)
+			#methods = [SOCKS5Method.PLAIN]
 		try:
 			nego = SOCKS5Nego.from_methods(methods)
-			logger.debug('[SOCKS5] Sending negotiation command to server @ %s:%d' % remote_writer.get_extra_info('peername'))
+			logger.debug('[SOCKS5 %s][SETUP] Sending negotiation command to server' % sname)
 			remote_writer.write(nego.to_bytes())
 			await asyncio.wait_for(
 				remote_writer.drain(), 
@@ -256,20 +267,18 @@ class SOCKSClient:
 				timeout = timeout
 			)
 			logger.debug(
-				'[SOCKS5] Got negotiation reply from from %s! Server choosen auth type: %s' % 
-				(remote_writer.get_extra_info('peername'), rep_nego.METHOD.name)
+				'[SOCKS5 %s] Got negotiation reply! Server choosen auth type: %s' % (sname, rep_nego.METHOD.name)
 			)
-			#logger.debug('Got negotiation reply from %s: %s' % (self.proxy_writer.get_extra_info('peername'), repr(rep_nego)))
 			
 			if rep_nego.METHOD == SOCKS5Method.PLAIN:
-				if credential is None or credential.username is None or credential.password is None:
-					raise Exception('SOCKS5 server requires PLAIN authentication, but no credentials were supplied!')
+				if proxy.credential is None or proxy.credential.username is None or proxy.credential.password is None:
+					raise Exception('SOCKS5 %s] server requires PLAIN authentication, but no credentials were supplied!' % sname)
 				
-				logger.debug('Preforming plaintext auth to %s:%d' % remote_writer.get_extra_info('peername'))
+				logger.debug('[SOCKS5 %s]Preforming plaintext auth' % sname)
 				remote_writer.write(
 					SOCKS5PlainAuth.construct(
-						credential.username, 
-						credential.password
+						proxy.credential.username, 
+						proxy.credential.password
 					).to_bytes()
 				)
 				await asyncio.wait_for(
@@ -290,17 +299,16 @@ class SOCKSClient:
 					raise SOCKS5AuthFailed() #raise Exception('Plaintext auth failed! Bad username or password')
 
 			elif rep_nego.METHOD == SOCKS5Method.GSSAPI:
-				raise Exception('SOCKS5 server requires GSSAPI authentication, but it\'s not supported at the moment')
+				raise Exception('[SOCKS5 %s] server requires GSSAPI authentication, but it\'s not supported at the moment' % sname)
 
-			logger.debug('[SOCKS5] Opening channel to %s:%s' % (target.endpoint_ip, target.endpoint_port))
-			logger.debug('[SOCKS5] Sending connect request to SOCKS server @ %s:%d' % remote_writer.get_extra_info('peername'))
+			logger.debug('[SOCKS5 %s] Opening channel to %s' % (sname, tname))
 			
-			if target.only_auth is True:
+			if proxy.only_auth is True:
 				return True, None
 
 			remote_writer.write(
 				SOCKS5Request.from_target(
-					target
+					proxy
 				).to_bytes()
 			)
 			await asyncio.wait_for(
@@ -313,20 +321,19 @@ class SOCKSClient:
 				timeout=timeout
 			)
 			if rep.REP != SOCKS5ReplyType.SUCCEEDED:
-				logger.info('Socks5 remote end failed to connect to target! Reson: %s' % rep.REP.name)
+				logger.info('[SOCKS5 %s] remote end failed to connect to proxy! Reson: %s' % (sname, rep.REP.name))
 				raise SOCKS5ServerErrorReply(rep.REP)
 			
-			if target.is_bind is False:
-				logger.debug('[SOCKS5] Server @ %s:%d successfully set up the connection to the endpoint! ' % remote_writer.get_extra_info('peername'))
+			if proxy.is_bind is False:
+				logger.debug('[SOCKS5 %s] Successfully set up the connection to the endpoint %s ' % (sname,tname))
 				return True, None
 			
-			s_ip, s_port = remote_writer.get_extra_info('peername')
-			logger.debug('[SOCKS5] Server @ %s:%d BIND first set completed, port %s available!' % (s_ip, s_port , rep.BIND_PORT))
+			logger.debug('[SOCKS5 %s] BIND first set completed, port %s available!' % (sname , rep.BIND_PORT))
 			#bind in progress, waiting for a second reply to notify us that the remote endpoint connected back.
 			
 			self.bind_port = rep.BIND_PORT
 			self.bind_progress_evt.set() #notifying that the bind port is now available on the socks server to be used
-			if target.only_bind is True:
+			if proxy.only_bind is True:
 				return True, None
 
 			rep = await asyncio.wait_for(
@@ -335,13 +342,13 @@ class SOCKSClient:
 			)
 
 			if rep.REP != SOCKS5ReplyType.SUCCEEDED:
-				logger.info('Socks5 remote end failed to connect to target! Reson: %s' % rep.REP.name)
+				logger.info('[SOCKS5 %s] remote end failed to connect to proxy! Reson: %s' % (sname, rep.REP.name))
 				raise SOCKS5ServerErrorReply(rep.REP)
 
 			return True, None
 
 		except Exception as e:
-			logger.debug('[SOCKS5] Error in run_socks5 %s' % e)
+			logger.debug('[SOCKS5 %s] Error in run_socks5 %s' % (sname, e))
 			return False, e
 
 	async def handle_client(self, reader, writer):
@@ -351,7 +358,7 @@ class SOCKSClient:
 		try:
 			logger.debug('[handle_client] Client connected!')
 
-			if len(self.target) > 1:
+			if len(self.proxies) > 1:
 				logger.debug('Start chaining...')
 
 			for _ in range(3, 0 , -1): #this is for HTTP auth...
@@ -359,52 +366,67 @@ class SOCKSClient:
 					remote_writer.close()
 				
 				try:
-					if self.target[0].network == 'SOCKET':
+					if self.proxies[0].network == 'SOCKET':
 						remote_reader, remote_writer = await asyncio.wait_for(
 							asyncio.open_connection(
-								self.target[0].server_ip, 
-								self.target[0].server_port,
-								ssl=self.target[0].ssl_ctx,
+								self.proxies[0].server_ip, 
+								self.proxies[0].server_port,
+								ssl=self.proxies[0].ssl_ctx,
 							),
-							timeout = self.target[0].timeout
+							timeout = self.proxies[0].timeout
 						)
 						logger.debug('Connected to socks server!')
-					elif self.target[0].network == 'WSNET':
+					elif self.proxies[0].network == 'WSNET':
 						from asysocks.network.wsnet import WSNETNetwork
-						remote_reader, remote_writer = await WSNETNetwork.open_connection(self.target[0].server_ip, self.target[0].server_port)
+						remote_reader, remote_writer = await WSNETNetwork.open_connection(self.proxies[0].server_ip, self.proxies[0].server_port)
 
 				except:
 					logger.debug('Failed to connect to SOCKS server!')
 					raise
 					
 				try:
-					for target, credential in zip(self.target, self.credentials):
-						if target.version in [SocksServerVersion.SOCKS4, SocksServerVersion.SOCKS4S]:
-							_, err = await self.run_socks4(target, credential, remote_reader, remote_writer)
+					for i, proxy in enumerate(self.proxies):
+						print(i)
+						print(len(self.proxies))
+						if proxy.version in [SocksServerVersion.SOCKS4, SocksServerVersion.SOCKS4S]:
+							_, err = await self.run_socks4(proxy, remote_reader, remote_writer)
 							if err is not None:
+								if len(self.proxies) > 1 and i != len(self.proxies)-1:
+									raise SocksTunnelError(err)
 								raise err
 							continue
 
-						elif target.version in [SocksServerVersion.SOCKS4A]:
-							_, err = await self.run_socks4a(target, credential, remote_reader, remote_writer)
+						elif proxy.version in [SocksServerVersion.SOCKS4A]:
+							_, err = await self.run_socks4a(proxy, remote_reader, remote_writer)
 							if err is not None:
+								if len(self.proxies) > 1 and i != len(self.proxies)-1:
+									raise SocksTunnelError(err)
 								raise err
 							continue
 
-						elif target.version in [SocksServerVersion.SOCKS5, SocksServerVersion.SOCKS5S]:
-							_, err = await self.run_socks5(target, credential, remote_reader, remote_writer)
+						elif proxy.version in [SocksServerVersion.SOCKS5, SocksServerVersion.SOCKS5S]:
+							_, err = await self.run_socks5(proxy, remote_reader, remote_writer)
 							if err is not None:
+								if len(self.proxies) > 1 and i != len(self.proxies)-1:
+									raise SocksTunnelError(err)
 								raise err
 							continue
 							
-						elif target.version in [SocksServerVersion.HTTP, SocksServerVersion.HTTPS]:
-							_, err = await self.run_http(target, credential, remote_reader, remote_writer)
+						elif proxy.version in [SocksServerVersion.HTTP, SocksServerVersion.HTTPS]:
+							_, err = await self.run_http(proxy, remote_reader, remote_writer)
 							if err is not None:
+								if len(self.proxies) > 1 and i != len(self.proxies)-1:
+									raise SocksTunnelError(err)
 								raise err
 							continue
 
 						else:
 							raise Exception('Unknown SOCKS version!')
+
+					else:
+						# no need to do more iterations because of HTTP at this point
+						break
+
 				except HTTPProxyAuthRequiredException:
 					continue
 				except:
@@ -418,8 +440,8 @@ class SOCKSClient:
 					reader, 
 					remote_writer, 
 					self.proxy_stopped_evt , 
-					buffer_size = self.target[0].buffer_size,
-					timeout = self.target[0].endpoint_timeout
+					buffer_size = self.proxies[0].buffer_size,
+					timeout = self.proxies[0].endpoint_timeout
 				)
 			)
 			self.proxytask_out = asyncio.create_task(
@@ -427,8 +449,8 @@ class SOCKSClient:
 					remote_reader, 
 					writer, 
 					self.proxy_stopped_evt, 
-					buffer_size = self.target[0].buffer_size,
-					timeout = self.target[0].endpoint_timeout
+					buffer_size = self.proxies[0].buffer_size,
+					timeout = self.proxies[0].endpoint_timeout
 				)
 			)
 			logger.debug('[handle_client] Proxy started!')
@@ -453,7 +475,7 @@ class SOCKSClient:
 			self.bind_progress_evt = asyncio.Event()
 
 		try:
-			if len(self.target) > 1:
+			if len(self.proxies) > 1:
 				logger.debug('Start chaining...')
 
 			for _ in range(3, 0 , -1):
@@ -461,18 +483,18 @@ class SOCKSClient:
 					remote_writer.close()
 				
 				try:
-					if self.target[0].network == 'SOCKET':
+					if self.proxies[0].network == 'SOCKET':
 						remote_reader, remote_writer = await asyncio.wait_for(
 							asyncio.open_connection(
-								self.target[0].server_ip, 
-								self.target[0].server_port
+								self.proxies[0].server_ip, 
+								self.proxies[0].server_port
 							),
-							timeout = self.target.timeout
+							timeout = self.proxies[0].timeout
 						)
 
-					elif self.target[0].network == 'WSNET':
+					elif self.proxies[0].network == 'WSNET':
 						from asysocks.network.wsnet import WSNETNetwork
-						remote_reader, remote_writer = await WSNETNetwork.open_connection(self.target[0].server_ip, self.target[0].server_port)
+						remote_reader, remote_writer = await WSNETNetwork.open_connection(self.proxies[0].server_ip, self.proxies[0].server_port)
 				
 				except:
 					logger.debug('Failed to connect to SOCKS server!')
@@ -481,42 +503,53 @@ class SOCKSClient:
 				logger.debug('[queue] Connected to socks server!')
 
 				try:
-					for target, credential in zip(self.target, self.credentials):
-						if target.version in [SocksServerVersion.SOCKS4, SocksServerVersion.SOCKS4S]:
-							_, err = await self.run_socks4(target, credential, remote_reader, remote_writer)
+					for i, proxy in enumerate(self.proxies):
+						if proxy.version in [SocksServerVersion.SOCKS4, SocksServerVersion.SOCKS4S]:
+							_, err = await self.run_socks4(proxy, remote_reader, remote_writer)
 							if err is not None:
+								if len(self.proxies) > 1 and i != len(self.proxies)-1:
+									raise SocksTunnelError(err)
 								raise err
 							continue
 
-						elif target.version in [SocksServerVersion.SOCKS4A]:
-							_, err = await self.run_socks4a(target, credential, remote_reader, remote_writer)
+						elif proxy.version in [SocksServerVersion.SOCKS4A]:
+							_, err = await self.run_socks4a(proxy, remote_reader, remote_writer)
 							if err is not None:
+								if len(self.proxies) > 1 and i != len(self.proxies)-1:
+									raise SocksTunnelError(err)
 								raise err
 							continue
 
-						elif target.version in [SocksServerVersion.SOCKS5, SocksServerVersion.SOCKS5S]:
-							_, err = await self.run_socks5(target, credential, remote_reader, remote_writer)
+						elif proxy.version in [SocksServerVersion.SOCKS5, SocksServerVersion.SOCKS5S]:
+							_, err = await self.run_socks5(proxy, remote_reader, remote_writer)
 							if err is not None:
+								if len(self.proxies) > 1 and i != len(self.proxies)-1:
+									raise SocksTunnelError(err)
 								raise err
 							continue
 							
-						elif target.version in [SocksServerVersion.HTTP, SocksServerVersion.HTTPS]:
-							_, err = await self.run_http(target, credential, remote_reader, remote_writer)
+						elif proxy.version in [SocksServerVersion.HTTP, SocksServerVersion.HTTPS]:
+							_, err = await self.run_http(proxy, remote_reader, remote_writer)
 							if err is not None:
+								if len(self.proxies) > 1 and i != len(self.proxies)-1:
+									raise SocksTunnelError(err)
 								raise err
 							continue
 
 						else:
 							raise Exception('Unknown SOCKS version!')
+					else:
+						break
+
 				except HTTPProxyAuthRequiredException:
 					continue
 				except:
 					raise
 			
-			if self.target.only_bind is True:
+			if self.proxies[-1].only_bind is True:
 				return True, None
 
-			if self.target.only_open is True or self.target.only_auth is True:
+			if self.proxies[-1].only_open is True or self.proxies[-1].only_auth is True:
 				# for auth guessing and connection testing
 				return True, None
 
@@ -530,7 +563,7 @@ class SOCKSClient:
 					self.comms.in_queue, 
 					remote_writer, 
 					self.proxy_stopped_evt, 
-					buffer_size = self.target.buffer_size
+					buffer_size = self.proxies[0].buffer_size
 				)
 			)
 			self.proxytask_out = asyncio.create_task(
@@ -538,8 +571,8 @@ class SOCKSClient:
 					self.comms.out_queue, 
 					remote_reader, 
 					self.proxy_stopped_evt, 
-					buffer_size = self.target.buffer_size, 
-					timeout = self.target.endpoint_timeout
+					buffer_size = self.proxies[0].buffer_size, 
+					timeout = self.proxies[0].endpoint_timeout
 				)
 			)
 			logger.debug('[queue] Proxy started!')
@@ -561,7 +594,7 @@ class SOCKSClient:
 
 
 	async def run(self):
-		if isinstance(self.target, list) is False and (self.target.is_bind is True and self.bind_progress_evt is None):
+		if isinstance(self.proxies, list) is False and (self.proxies.is_bind is True and self.bind_progress_evt is None):
 			self.bind_progress_evt = asyncio.Event()
 		
 		if self.channel_open_evt is None:

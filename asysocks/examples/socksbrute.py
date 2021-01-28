@@ -2,13 +2,14 @@
 import asyncio
 import logging
 import traceback
+import copy
 
 from asysocks import logger
 from asysocks._version import __banner__
 
 from asysocks.protocol.http import HTTPProxyAuthFailed
 from asysocks.protocol.socks5 import SOCKS5AuthFailed
-from asysocks.client import SOCKSClient
+from asysocks.client import SOCKSClient, SocksTunnelError
 from asysocks.common.credentials import SocksCredential
 from asysocks.common.comms import SocksQueueComms
 from asysocks.protocol.socks5 import SOCKS5Method, SOCKS5Nego, SOCKS5NegoReply, SOCKS5Request, SOCKS5Reply, SOCKS5ReplyType, SOCKS5Command, SOCKS5PlainAuth, SOCKS5PlainAuthReply, SOCKS5ServerErrorReply
@@ -56,14 +57,14 @@ class ListStringGen:
 
 
 class SOCKSBrute:
-	def __init__(self, connection_url):
-		self.connection_url = connection_url
+	def __init__(self, proxies):
+		self.proxies = proxies
 		self.user_gens = []
 		self.password_gens = []
 		self.passwords = {}
 		self.worker_cnt = 100
 		self.timeout = 1
-		self.max_retries = 50
+		self.max_retries = 5
 		self.retries_sleep = 1
 		self.verify_target = '8.8.8.8'
 		self.verify_port = 53
@@ -97,10 +98,13 @@ class SOCKSBrute:
 							if isinstance(err, (HTTPProxyAuthFailed, SOCKS5AuthFailed)):
 								await self.__result_queue.put((username, password, False, None))
 								break
-							
+							elif isinstance(err, SocksTunnelError):
+								logger.debug('Tunnel setup failed!. Reason %s' % traceback.format_tb(err.__traceback__))
+
+							elif isinstance(err, OSError):
+								logger.debug('Failed socket connection to initial proxy!. Reason %s' % traceback.format_tb(err.__traceback__))
 							continue
 							
-
 						await self.__result_queue.put((username, password, True, None))
 						break
 					
@@ -137,19 +141,19 @@ class SOCKSBrute:
 					credential = SocksCredential()
 					credential.username = user
 					credential.password = password
-					target = self.connection_url.get_target()
-					target.only_open = True
-					target.only_auth = True
-					target.endpoint_ip = self.verify_target
-					target.endpoint_port = self.verify_port
+					proxies = copy.deepcopy(self.proxies)
+					proxies[-1].only_open = True
+					proxies[-1].only_auth = True
+					proxies[-1].endpoint_ip = self.verify_target
+					proxies[-1].endpoint_port = self.verify_port
+					proxies[-1].credential = credential
 
 
 					in_q = asyncio.Queue()
 					out_q = asyncio.Queue()
 
 					comms = SocksQueueComms(in_q, out_q)
-
-					client = SOCKSClient(comms, target, credential)
+					client = SOCKSClient(comms, proxies)
 
 					await self.__target_queue.put((user, password, client))
 				
@@ -241,7 +245,6 @@ def main():
 	import argparse
 
 	parser = argparse.ArgumentParser(description='SOCKS5 proxy auth bruteforcer')
-	parser.add_argument('proxy_connection_string', help='connection string decribing the socks5 proxy server connection properties')
 	parser.add_argument('-u', '--users', action='append', help='User or users file with one user per line. can be stacked')
 	parser.add_argument('-p', '--passwords', action='append', help='Password or password file with one password per line. can be stacked')
 	parser.add_argument('-t', '--timeout', type = int, default = None, help='Brute retries sleep time')
@@ -250,6 +253,7 @@ def main():
 	parser.add_argument('-s', '--silent', action='store_true', help = 'dont print banner')
 	parser.add_argument('-o', '--out-file', help = 'output file')
 	parser.add_argument('--positive', action='store_true', help = 'only show sucsessful results')
+	parser.add_argument('proxies', nargs='*', help='connection string(s) of the target proxy. if you want a chain of proxies to use before reaching the target then supply the chain in order, the target must be the LAST OF THE URLS!!!')
 
 
 	args = parser.parse_args()
@@ -265,8 +269,8 @@ def main():
 	elif args.verbose > 2:
 		logger.setLevel(1)
 
-	url = SocksClientURL.from_url(args.proxy_connection_string)
-	brute = SOCKSBrute(url)
+	proxychain = SocksClientURL.from_urls(args.proxies)
+	brute = SOCKSBrute(proxychain)
 	brute.timeout = args.timeout
 	brute.worker_cnt = args.worker_count
 	brute.output_file = args.out_file
