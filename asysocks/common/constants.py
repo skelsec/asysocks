@@ -9,6 +9,7 @@ class SocksServerVersion(enum.Enum):
 	SOCKS4S = 'SOCKS4S'
 	HTTP = 'HTTP'
 	HTTPS = 'HTTPS'
+	WSNET = 'WSNET'
 
 class SocksProtocol(enum.Enum):
 	TCP = 'TCP'

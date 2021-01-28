@@ -366,7 +366,7 @@ class SOCKSClient:
 					remote_writer.close()
 				
 				try:
-					if self.proxies[0].network == 'SOCKET':
+					if self.proxies[0].version != SocksServerVersion.WSNET:
 						remote_reader, remote_writer = await asyncio.wait_for(
 							asyncio.open_connection(
 								self.proxies[0].server_ip, 
@@ -376,7 +376,7 @@ class SOCKSClient:
 							timeout = self.proxies[0].timeout
 						)
 						logger.debug('Connected to socks server!')
-					elif self.proxies[0].network == 'WSNET':
+					else:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(self.proxies[0].server_ip, self.proxies[0].server_port)
 
@@ -386,8 +386,6 @@ class SOCKSClient:
 					
 				try:
 					for i, proxy in enumerate(self.proxies):
-						print(i)
-						print(len(self.proxies))
 						if proxy.version in [SocksServerVersion.SOCKS4, SocksServerVersion.SOCKS4S]:
 							_, err = await self.run_socks4(proxy, remote_reader, remote_writer)
 							if err is not None:
@@ -418,6 +416,11 @@ class SOCKSClient:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
 								raise err
+							continue
+
+						elif proxy.version in [SocksServerVersion.WSNET]:
+							if i != 0:
+								raise Exception("WSNET only supported as the first proxy in chain!")
 							continue
 
 						else:
@@ -483,7 +486,7 @@ class SOCKSClient:
 					remote_writer.close()
 				
 				try:
-					if self.proxies[0].network == 'SOCKET':
+					if self.proxies[0].version != SocksServerVersion.WSNET:
 						remote_reader, remote_writer = await asyncio.wait_for(
 							asyncio.open_connection(
 								self.proxies[0].server_ip, 
@@ -492,7 +495,7 @@ class SOCKSClient:
 							timeout = self.proxies[0].timeout
 						)
 
-					elif self.proxies[0].network == 'WSNET':
+					else:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(self.proxies[0].server_ip, self.proxies[0].server_port)
 				
@@ -534,6 +537,11 @@ class SOCKSClient:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
 								raise err
+							continue
+						
+						elif proxy.version in [SocksServerVersion.WSNET]:
+							if i != 0:
+								raise Exception("WSNET only supported as the first proxy in chain!")
 							continue
 
 						else:

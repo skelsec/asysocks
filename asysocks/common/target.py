@@ -19,8 +19,7 @@ class SocksTarget:
 		self.endpoint_ip = None
 		self.endpoint_port = None
 		self.endpoint_timeout = None #used after the connection is made
-
-		self.network = 'SOCKET'
+		
 		self.credential = None
 
 		self.only_open = False #These params used for security testing only! 
