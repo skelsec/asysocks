@@ -9,7 +9,6 @@ from asysocks.protocol.socks4 import SOCKS4Request, SOCKS4Reply, SOCKS4CDCode
 from asysocks.protocol.socks4a import SOCKS4ARequest, SOCKS4AReply, SOCKS4ACDCode
 from asysocks.protocol.socks5 import SOCKS5Method, SOCKS5Nego, SOCKS5NegoReply, SOCKS5Request, SOCKS5Reply, SOCKS5ReplyType, SOCKS5PlainAuth, SOCKS5PlainAuthReply, SOCKS5ServerErrorReply, SOCKS5AuthFailed
 
-
 class SocksTunnelError(Exception):
 	def __init__(self, innerexception, message="Something failed setting up the tunnel! See innerexception for more details"):
 		self.innerexception = innerexception
@@ -106,11 +105,15 @@ class SOCKSClient:
 	@staticmethod
 	async def proxy_queue_out(out_queue, reader, proxy_stopped_evt, buffer_size = 4096, timeout = None):
 		try:
+			is_wsnet = hasattr(reader, 'wsnet_reader_type')
 			while True:
-				data = await asyncio.wait_for(
-					reader.read(buffer_size),
-					timeout = timeout
-				)
+				if is_wsnet:
+					data = await reader.read(buffer_size)
+				else:
+					data = await asyncio.wait_for(
+						reader.read(buffer_size),
+						timeout = timeout
+					)
 				if data == b'':
 					logger.debug('proxy_queue_out endpoint disconncted!')
 					await out_queue.put((None, Exception('proxy_queue_out endpoint disconncted gracefully!')))
@@ -378,7 +381,10 @@ class SOCKSClient:
 						logger.debug('Connected to socks server!')
 					else:
 						from asysocks.network.wsnet import WSNETNetwork
-						remote_reader, remote_writer = await WSNETNetwork.open_connection(self.proxies[0].server_ip, self.proxies[0].server_port)
+						remote_reader, remote_writer = await WSNETNetwork.open_connection(
+							self.proxies[0].endpoint_ip, 
+							self.proxies[0].endpoint_port
+						)
 
 				except:
 					logger.debug('Failed to connect to SOCKS server!')
@@ -497,7 +503,10 @@ class SOCKSClient:
 
 					else:
 						from asysocks.network.wsnet import WSNETNetwork
-						remote_reader, remote_writer = await WSNETNetwork.open_connection(self.proxies[0].server_ip, self.proxies[0].server_port)
+						remote_reader, remote_writer = await WSNETNetwork.open_connection(
+							self.proxies[0].endpoint_ip, 
+							self.proxies[0].endpoint_port
+						)
 				
 				except:
 					logger.debug('Failed to connect to SOCKS server!')
@@ -571,7 +580,7 @@ class SOCKSClient:
 					self.comms.in_queue, 
 					remote_writer, 
 					self.proxy_stopped_evt, 
-					buffer_size = self.proxies[0].buffer_size
+					buffer_size = self.proxies[-1].buffer_size
 				)
 			)
 			self.proxytask_out = asyncio.create_task(
@@ -579,8 +588,8 @@ class SOCKSClient:
 					self.comms.out_queue, 
 					remote_reader, 
 					self.proxy_stopped_evt, 
-					buffer_size = self.proxies[0].buffer_size, 
-					timeout = self.proxies[0].endpoint_timeout
+					buffer_size = self.proxies[-1].buffer_size, 
+					timeout = self.proxies[-1].endpoint_timeout
 				)
 			)
 			logger.debug('[queue] Proxy started!')

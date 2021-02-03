@@ -92,10 +92,12 @@ class SocksClientURL:
 		return target
 
 	def sanity_check(self):
-		if self.server_ip is None:
-			raise Exception('SOCKS server IP is missing!')
-		if self.server_port is None:
-			raise Exception('SOCKS server port is missing!')
+		if self.version != SocksServerVersion.WSNET:
+			if self.server_ip is None:
+				raise Exception('SOCKS server IP is missing!')
+			if self.server_port is None:
+				raise Exception('SOCKS server port is missing!')
+
 		if self.buffer_size <= 0:
 			raise Exception('buffer_size is too low! %s' % self.buffer_size)
 		if self.endpoint_ip is None:
@@ -147,6 +149,8 @@ class SocksClientURL:
 			res.server_port = 1080
 		elif res.version == SocksServerVersion.SOCKS4AS:
 			res.server_port = 1080
+		elif res.version == SocksServerVersion.WSNET:
+			res.server_port = None
 
 		res.username = url_e.username
 		res.password = url_e.password
@@ -197,7 +201,6 @@ class SocksClientURL:
 			firstiter = True
 			prevproxy = lastproxy
 			for i in proxycounts[::-1]:
-				print('i %s' % i)
 				pdata = SocksClientURL()
 				if firstiter is True:
 					firstiter = False
@@ -215,10 +218,8 @@ class SocksClientURL:
 						if i == 0:
 							startpos = 5
 												
-						print(k)
 						if k[startpos:] in clienturl_param2var:
 							data = query[k][0]
-							print(data)
 							for c in clienturl_param2var[k[startpos:]][1]:
 								#print(c)
 								data = c(data)
@@ -229,11 +230,6 @@ class SocksClientURL:
 								data
 							)
 				proxynums[str(i)] = pdata
-		
-		print(proxynums)
-		for k in proxynums:
-			print(k)
-			print(proxynums[k].__dict__)
 
 		if len(proxynums) > 1:
 			for k in proxynums:
@@ -249,7 +245,7 @@ class SocksClientURL:
 		
 		targets = []
 		for i in proxycounts:
-			targets.append(proxynums[str(i)])
+			targets.append(proxynums[str(i)].get_target())
 
 		return targets
 
