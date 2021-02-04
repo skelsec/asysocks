@@ -25,7 +25,7 @@ class SOCKSClient:
 		self.proxytask_in = None
 		self.proxytask_out = None
 		self.proxy_stopped_evt = None
-		self.__http_auth = None
+		self.http_auth_ctx = None
 		self.bind_progress_evt = bind_evt
 		self.bind_port = None
 		self.channel_open_evt = channel_open_evt
@@ -132,18 +132,15 @@ class SOCKSClient:
 			proxy_stopped_evt.set()
 	
 
-	async def run_http(self, proxy, remote_reader, remote_writer, timeout = None):		
+	async def run_http(self, proxy, remote_reader, remote_writer, timeout = None, http_auth_ctx = None):		
 		try:
-			print('!!!!! __http_auth is not resolved !!!!')
 			logger.debug('[HTTP] Opening channel to %s:%s' % (proxy.endpoint_ip, proxy.endpoint_port))
 			connect_cmd = 'CONNECT %s:%s HTTP/1.1\r\nHost: %s:%s\r\n' % (proxy.endpoint_ip, proxy.endpoint_port, proxy.endpoint_ip, proxy.endpoint_port)
 			connect_cmd = connect_cmd.encode()
 
-			__http_auth = None
-			if __http_auth is None:
-				
+			
+			if http_auth_ctx is None:
 				remote_writer.write(connect_cmd + b'\r\n')
-				#remote_writer.write(connect_cmd + b'\r\n')
 				await asyncio.wait_for(remote_writer.drain(), timeout = timeout)
 				
 				resp, err = await HTTPResponse.from_streamreader(remote_reader, timeout=timeout)
@@ -152,7 +149,7 @@ class SOCKSClient:
 
 				if resp.status == 200:
 					logger.debug('[HTTP] Server succsessfully connected!')
-					return True, None
+					return True, http_auth_ctx, None
 			
 				elif resp.status == 407:
 					logger.debug('[HTTP] Server proxy auth required!')
@@ -165,11 +162,12 @@ class SOCKSClient:
 						raise Exception('HTTP proxy requires authentication, but requested auth type could not be determined')
 					
 					auth_type, _ = auth_type.split(' ', 1)
-					__http_auth = auth_type.upper()
+					logger.debug('HTTP proxy requires %s auth' % auth_type)
+					http_auth_ctx = auth_type.upper()
 
-					return False, HTTPProxyAuthRequiredException()
+					return False, http_auth_ctx, HTTPProxyAuthRequiredException()
 			
-			elif __http_auth == 'BASIC':
+			elif http_auth_ctx == 'BASIC':
 				auth_data = base64.b64encode(('%s:%s' % (proxy.credential.username, proxy.credential.password) ).encode() )
 				auth_connect = connect_cmd + b'Proxy-Authorization: Basic ' + auth_data + b'\r\n'
 				remote_writer.write(auth_connect + b'\r\n')
@@ -181,18 +179,18 @@ class SOCKSClient:
 
 				if resp.status == 200:
 					logger.debug('[HTTP] Server proxy auth succsess!')
-					return True, None
+					return True, http_auth_ctx, None
 					
 				else:
 					raise HTTPProxyAuthFailed() #raise Exception('Proxy auth failed!')
 				
 			else:
-				raise Exception('HTTP proxy requires %s authentication, but it\'s not implemented' % __http_auth)
+				raise Exception('HTTP proxy requires %s authentication, but it\'s not implemented' % http_auth_ctx)
 
 
 		except Exception as e:
 			logger.debug('run_http')
-			return False, e
+			return False, None, e
 
 	async def run_socks4(self, proxy, remote_reader, remote_writer, timeout = None):
 		"""
@@ -417,7 +415,7 @@ class SOCKSClient:
 							continue
 							
 						elif proxy.version in [SocksServerVersion.HTTP, SocksServerVersion.HTTPS]:
-							_, err = await self.run_http(proxy, remote_reader, remote_writer)
+							_, self.http_auth_ctx, err = await self.run_http(proxy, remote_reader, remote_writer, http_auth_ctx = self.http_auth_ctx)
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
@@ -477,7 +475,6 @@ class SOCKSClient:
 
 	async def handle_queue(self):
 		logger.debug('[queue] Connecting to socks server...')
-		#connecting to socks server
 		remote_writer = None
 		remote_reader = None
 		if self.bind_progress_evt is None:
@@ -541,7 +538,7 @@ class SOCKSClient:
 							continue
 							
 						elif proxy.version in [SocksServerVersion.HTTP, SocksServerVersion.HTTPS]:
-							_, err = await self.run_http(proxy, remote_reader, remote_writer)
+							_, self.http_auth_ctx, err = await self.run_http(proxy, remote_reader, remote_writer, http_auth_ctx = self.http_auth_ctx)
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
