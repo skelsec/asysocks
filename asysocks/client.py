@@ -367,17 +367,7 @@ class SOCKSClient:
 					remote_writer.close()
 				
 				try:
-					if self.proxies[0].version not in [SocksServerVersion.WSNET, SocksServerVersion.WSNETWS]:
-						remote_reader, remote_writer = await asyncio.wait_for(
-							asyncio.open_connection(
-								self.proxies[0].server_ip, 
-								self.proxies[0].server_port,
-								ssl=self.proxies[0].ssl_ctx,
-							),
-							timeout = self.proxies[0].timeout
-						)
-						logger.debug('Connected to socks server!')
-					elif self.proxies[0].version == SocksServerVersion.WSNET:
+					if self.proxies[0].version == SocksServerVersion.WSNET:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(
 							self.proxies[0].endpoint_ip, 
@@ -392,7 +382,18 @@ class SOCKSClient:
 							self.proxies[0].server_port,
 							self.proxies[0].version,
 							self.proxies[0].agentid,
+							self.proxies[0].timeout,
 						)
+					else:
+						remote_reader, remote_writer = await asyncio.wait_for(
+							asyncio.open_connection(
+								self.proxies[0].server_ip, 
+								self.proxies[0].server_port,
+								ssl=self.proxies[0].ssl_ctx,
+							),
+							timeout = self.proxies[0].timeout
+						)
+						logger.debug('Connected to socks server!')
 
 				except:
 					logger.debug('Failed to connect to SOCKS server!')
@@ -493,22 +494,12 @@ class SOCKSClient:
 		try:
 			if len(self.proxies) > 1:
 				logger.debug('Start chaining...')
-
 			for _ in range(3, 0 , -1):
 				if remote_writer is not None:
 					remote_writer.close()
 				
 				try:
-					if self.proxies[0].version != SocksServerVersion.WSNET:
-						remote_reader, remote_writer = await asyncio.wait_for(
-							asyncio.open_connection(
-								self.proxies[0].server_ip, 
-								self.proxies[0].server_port
-							),
-							timeout = self.proxies[0].timeout
-						)
-
-					elif self.proxies[0].version == SocksServerVersion.WSNET:
+					if self.proxies[0].version == SocksServerVersion.WSNET:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(
 							self.proxies[0].endpoint_ip, 
@@ -523,8 +514,16 @@ class SOCKSClient:
 							self.proxies[0].server_port,
 							self.proxies[0].version,
 							self.proxies[0].agentid,
+							self.proxies[0].timeout,
 						)
-				
+					else:
+						remote_reader, remote_writer = await asyncio.wait_for(
+							asyncio.open_connection(
+								self.proxies[0].server_ip, 
+								self.proxies[0].server_port
+							),
+							timeout = self.proxies[0].timeout
+						)
 				except:
 					logger.debug('Failed to connect to SOCKS server!')
 					raise

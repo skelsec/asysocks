@@ -1,6 +1,7 @@
 from pyodidewsnet.clientws import WSNetworkWS
 from asysocks.common.constants import SocksServerVersion
 import asyncio
+from asysocks import logger
 
 # This code only works properly in the conditions met in this specific library.
 # If you want to copy it to your project please make sure that you 
@@ -10,7 +11,7 @@ import asyncio
 
 class WSNETNetworkWS:
 	@staticmethod
-	async def open_connection(target_host, target_port, host, port, proto, agentid = None):
+	async def open_connection(target_host, target_port, host, port, proto, agentid = None, timeout = None):
 		out_queue = asyncio.Queue()
 		in_queue = asyncio.Queue()
 		closed_event = asyncio.Event()
@@ -20,16 +21,15 @@ class WSNETNetworkWS:
 			proto = 'wss'
 		
 		url = '%s://%s:%s/' % (proto, host, port)
-		print(url)
-		print(agentid)
+		logger.debug('WSNETNetworkWS URL: %s' % url)
+		logger.debug('WSNETNetworkWS AGENTID: %s' % agentid)
 		agentid = bytes.fromhex(agentid)
 
 		client = WSNetworkWS(target_host, target_port, url, in_queue, out_queue, agentid)
-		_, err = await client.run()
+		_, err = await asyncio.wait_for(client.run(), timeout)
 		if err is not None:
 			raise err
-			
-		writer = WSNETWriter(out_queue, closed_event)
+		writer = WSNETWriter(out_queue, closed_event, client)
 		reader = WSNETReader(in_queue, closed_event)
 		await writer.run()
 		await reader.run()
@@ -37,9 +37,10 @@ class WSNETNetworkWS:
 		return reader, writer
 
 class WSNETWriter:
-	def __init__(self, out_queue, closed_event):
+	def __init__(self, out_queue, closed_event, client):
 		self.out_queue = out_queue
 		self.closed_event = closed_event
+		self.client = client
 
 	def write(self, data):
 		self.out_queue.put_nowait(data)
@@ -47,6 +48,7 @@ class WSNETWriter:
 	def close(self):
 		self.out_queue.put_nowait(None)
 		self.closed_event.set()
+		asyncio.create_task(self.client.terminate())
 
 	async def drain(self):
 		await asyncio.sleep(0)
