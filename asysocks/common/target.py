@@ -15,6 +15,7 @@ class SocksTarget:
 		self.buffer_size = 4096
 		self.ssl_ctx = None
 		self.userid = os.urandom(4).hex().encode('ascii')
+		self.agentid = None
 		
 		self.endpoint_ip = None
 		self.endpoint_port = None

@@ -31,6 +31,7 @@ clienturl_param2var = {
 	'pass' : ('password', [str]),
 	'authtype' : ('authtype', [SOCKS5Method]),
 	'userid' : ('userid', [str]),
+	'agentid' : ('agentid', [str]),
 
 }
 
@@ -40,6 +41,7 @@ clienturl_url2var = {
 	'timeout' : ('timeout', int),
 	'buffersize' : ('buffer_size', int),
 	'userid' : ('userid', str),
+	'agentid' : ('agentid', str),
 }
 
 sockssslversions = {
@@ -65,6 +67,7 @@ class SocksClientURL:
 		
 		self.username = None
 		self.password = None
+		self.agentid = None
 
 
 	def get_creds(self):
@@ -89,6 +92,7 @@ class SocksClientURL:
 		target.endpoint_timeout = self.endpoint_timeout
 		target.ssl_ctx = self.ssl_ctx
 		target.credential = self.get_creds()
+		target.agentid = self.agentid
 		return target
 
 	def sanity_check(self):
@@ -156,7 +160,8 @@ class SocksClientURL:
 		res.password = url_e.password
 		if res.version in sockssslversions:
 			res.ssl_ctx = ssl.create_default_context()
-
+		
+		print(url_e)
 		if url_e.query is not None:
 			query = parse_qs(url_e.query)
 			for k in query:

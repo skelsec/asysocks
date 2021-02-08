@@ -367,7 +367,7 @@ class SOCKSClient:
 					remote_writer.close()
 				
 				try:
-					if self.proxies[0].version != SocksServerVersion.WSNET:
+					if self.proxies[0].version not in [SocksServerVersion.WSNET, SocksServerVersion.WSNETWS]:
 						remote_reader, remote_writer = await asyncio.wait_for(
 							asyncio.open_connection(
 								self.proxies[0].server_ip, 
@@ -377,11 +377,21 @@ class SOCKSClient:
 							timeout = self.proxies[0].timeout
 						)
 						logger.debug('Connected to socks server!')
-					else:
+					elif self.proxies[0].version == SocksServerVersion.WSNET:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(
 							self.proxies[0].endpoint_ip, 
 							self.proxies[0].endpoint_port
+						)
+					elif self.proxies[0].version in [SocksServerVersion.WSNETWS, SocksServerVersion.WSNETWSS]:
+						from asysocks.network.wsnetws import WSNETNetworkWS
+						remote_reader, remote_writer = await WSNETNetworkWS.open_connection(
+							self.proxies[0].endpoint_ip,
+							self.proxies[0].endpoint_port,
+							self.proxies[0].server_ip,
+							self.proxies[0].server_port,
+							self.proxies[0].version,
+							self.proxies[0].agentid,
 						)
 
 				except:
@@ -422,7 +432,7 @@ class SOCKSClient:
 								raise err
 							continue
 
-						elif proxy.version in [SocksServerVersion.WSNET]:
+						elif proxy.version in [SocksServerVersion.WSNET, SocksServerVersion.WSNETWS, SocksServerVersion.WSNETWSS]:
 							if i != 0:
 								raise Exception("WSNET only supported as the first proxy in chain!")
 							continue
@@ -498,11 +508,21 @@ class SOCKSClient:
 							timeout = self.proxies[0].timeout
 						)
 
-					else:
+					elif self.proxies[0].version == SocksServerVersion.WSNET:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(
 							self.proxies[0].endpoint_ip, 
 							self.proxies[0].endpoint_port
+						)
+					elif self.proxies[0].version in [SocksServerVersion.WSNETWS, SocksServerVersion.WSNETWSS]:
+						from asysocks.network.wsnetws import WSNETNetworkWS
+						remote_reader, remote_writer = await WSNETNetworkWS.open_connection(
+							self.proxies[0].endpoint_ip,
+							self.proxies[0].endpoint_port,
+							self.proxies[0].server_ip,
+							self.proxies[0].server_port,
+							self.proxies[0].version,
+							self.proxies[0].agentid,
 						)
 				
 				except:
@@ -545,7 +565,7 @@ class SOCKSClient:
 								raise err
 							continue
 						
-						elif proxy.version in [SocksServerVersion.WSNET]:
+						elif proxy.version in [SocksServerVersion.WSNET, SocksServerVersion.WSNETWS, SocksServerVersion.WSNETWSS]:
 							if i != 0:
 								raise Exception("WSNET only supported as the first proxy in chain!")
 							continue

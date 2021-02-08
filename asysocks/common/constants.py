@@ -10,6 +10,8 @@ class SocksServerVersion(enum.Enum):
 	HTTP = 'HTTP'
 	HTTPS = 'HTTPS'
 	WSNET = 'WSNET'
+	WSNETWS = 'WSNETWS'
+	WSNETWSS = 'WSNETWSS'
 
 class SocksProtocol(enum.Enum):
 	TCP = 'TCP'
