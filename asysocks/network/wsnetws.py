@@ -68,21 +68,34 @@ class WSNETReader:
 		self.err = None
 
 	async def __handle_in(self):
-		while True:
-			res, self.err = await self.in_queue.get()
-			if self.err is not None:
-				if res is not None:
-					self.buffer += res
-					if len(self.data_in_evt) != 0:
-						evt = self.data_in_evt.pop()
-						evt.set()
-				self.closed_event.set()
-				return
+		try:
+			while True:
+				res, self.err = await self.in_queue.get()
+				if self.err is not None:
+					if res is not None:
+						self.buffer += res
+						if len(self.data_in_evt) != 0:
+							evt = self.data_in_evt.pop()
+							evt.set()
+					self.closed_event.set()
+					return
 
-			self.buffer += res
-			if len(self.data_in_evt) != 0:
-				evt = self.data_in_evt.pop()
+				self.buffer += res
+				if len(self.data_in_evt) != 0:
+					evt = self.data_in_evt.pop()
+					evt.set()
+
+		except asyncio.CancelledError:
+			return
+
+		except Exception as e:
+			raise e
+
+		finally:
+			self.closed_event.set()
+			for evt in self.data_in_evt:
 				evt.set()
+
 
 	async def run(self):
 		self.handle_task = asyncio.create_task(self.__handle_in())
@@ -104,6 +117,10 @@ class WSNETReader:
 			self.buffer = self.buffer[n:]
 			#print('read ret %s' % temp)
 			return temp
+
+		
+		except asyncio.CancelledError:
+			return
 
 		except Exception as e:
 			#print(e)
@@ -130,6 +147,9 @@ class WSNETReader:
 			#print('readexactly ret %s' % temp)
 			return temp
 
+		except asyncio.CancelledError:
+			return
+
 		except Exception as e:
 			#print(e)
 			self.closed_event.set()
@@ -150,6 +170,9 @@ class WSNETReader:
 			self.buffer = self.buffer[end:]
 			#print('readuntil ret %s' % temp)
 			return temp
+		
+		except asyncio.CancelledError:
+			return
 
 		except Exception as e:
 			#print(e)
