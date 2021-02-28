@@ -11,8 +11,6 @@ except:
 		pass
 
 from asysocks.server import SOCKSServer, srvlogger
-from asysocks.intercepting.server import InterceptServer
-from asysocks.certmanager import CertManager
 from asysocks._version import __banner__
 
 async def amain():
@@ -49,6 +47,8 @@ async def amain():
 
 		
 		if args.monitor is True:
+			from asysocks.intercepting.server import InterceptServer
+			from asysocks.certmanager import CertManager
 			certmanager = CertManager()
 			log_queue = asyncio.Queue()
 		
