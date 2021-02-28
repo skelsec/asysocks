@@ -341,7 +341,7 @@ class SocksSecurity:
 			out_q = asyncio.Queue()
 
 			comms = SocksQueueComms(in_q, out_q)
-			client = SOCKSClient(comms, target, credential)
+			client = SOCKSClient(comms, target)
 			
 			res, err = await client.handle_queue()
 			if err is None:
@@ -371,16 +371,18 @@ class SocksSecurity:
 			target.endpoint_ip = self.server_ip
 			target.endpoint_port = self.verify_port if self.verify_port is not None else 22
 			target.endpoint_timeout = None
+			target.only_open = True
 
 			credential = SocksCredential()
 			credential.username = username
 			credential.password = password
+			target.credential = credential
 
 			in_q = asyncio.Queue()
 			out_q = asyncio.Queue()
 
 			comms = SocksQueueComms(in_q, out_q)
-			client = SOCKSClient(comms, target, credential)
+			client = SOCKSClient(comms, target)
 			
 			res, err = await client.handle_queue()
 			if err is None:
@@ -417,6 +419,7 @@ class SocksSecurity:
 				credential = SocksCredential()
 				credential.username = username
 				credential.password = password
+				target.credential = credential
 
 				in_q = asyncio.Queue()
 				out_q = asyncio.Queue()
@@ -424,7 +427,7 @@ class SocksSecurity:
 				comms = SocksQueueComms(in_q, out_q)
 				channel_open_evt = asyncio.Event()
 				
-				client = SOCKSClient(comms, target, credential, bind_evt = channel_open_evt)
+				client = SOCKSClient(comms, target, bind_evt = channel_open_evt)
 				#client_task = asyncio.create_task(client.run())
 
 				res, err = await client.handle_queue()

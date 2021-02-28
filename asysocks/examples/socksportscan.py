@@ -2,6 +2,7 @@
 import asyncio
 import ipaddress
 import logging
+import copy
 
 from asysocks import logger
 
@@ -148,8 +149,8 @@ class ListTargetPortGen:
 
 
 class SOCKSPortscan:
-	def __init__(self, connection_url):
-		self.connection_url = connection_url
+	def __init__(self, proxyies):
+		self.proxyies = proxyies
 		self.target_gens = []
 		self.port_gens = []
 		self.ports = {}
@@ -172,26 +173,22 @@ class SOCKSPortscan:
 					temp = await self.__target_queue.get()
 					if temp is None:
 						return
-					
 					ip, port, client = temp
-
 					retries = self.max_retries
 					while retries != 0:
 						if retries != self.max_retries:
 							await asyncio.sleep(self.retries_timeout)
 						retries -= 1
 						_, err = await client.handle_queue()
+
 						if err is not None:
-							#print(err)
 							if isinstance(err, SOCKS5ServerErrorReply):
 								if err.reply in [SOCKS5ReplyType.TTL_EXPIRED, SOCKS5ReplyType.CONN_REFUSED, SOCKS5ReplyType.HOST_UNREACHABLE, SOCKS5ReplyType.CONN_NOT_ALLOWED]:
 									await self.__result_queue.put((ip, port, False, None))	
 
 								elif err.reply in [SOCKS5ReplyType.ADDRESS_TYPE_NOT_SUPPORTED]:
 									await self.__result_queue.put((ip, port, None, err))
-								
 								break
-							
 							continue
 						
 
@@ -205,6 +202,7 @@ class SOCKSPortscan:
 					return
 
 				except Exception as e:
+					print(e)
 					pass
 		
 		except asyncio.CancelledError:
@@ -225,23 +223,21 @@ class SOCKSPortscan:
 				addr = await self.__addr_queue.get()
 				if addr is None:
 					break
-				print(addr)
+
 				for port in self.ports:
 					self.__total_targets += 1
-					credential = self.connection_url.get_creds()
-					target = self.connection_url.get_target()
-					target.endpoint_ip = addr
-					target.endpoint_port = port
-					target.timeout = None
-					target.only_open = True
+					proxyies = copy.deepcopy(self.proxyies)
+					proxyies[-1].endpoint_ip = addr
+					proxyies[-1].endpoint_port = port
+					proxyies[-1].timeout = None
+					proxyies[-1].only_open = True
 
 
 					in_q = asyncio.Queue()
 					out_q = asyncio.Queue()
 
 					comms = SocksQueueComms(in_q, out_q)
-
-					client = SOCKSClient(comms, target, credential)
+					client = SOCKSClient(comms, proxyies)
 
 					await self.__target_queue.put((addr, port, client))
 				
@@ -254,7 +250,6 @@ class SOCKSPortscan:
 		try:
 			for target_gen in self.target_gens:
 				cnt, err = await target_gen.run(self.__addr_queue)
-				print(cnt)
 				if err is not None:
 					print(err)
 				self.__total_addrs += cnt
@@ -306,13 +301,14 @@ def main():
 	import argparse
 
 	parser = argparse.ArgumentParser(description='SOCKS/HTTP proxy port scanner')
-	parser.add_argument('proxy_connection_string', help='connection string decribing the socks5 proxy server connection properties')
-	parser.add_argument('-p', '--ports', action='append', help='port to scan / port range to scan / port range file. can be stacked')
-	parser.add_argument('-t', '--timeout', type = int, default = None, help='Scan retries sleep time')
-	parser.add_argument('-r', '--retries', type = int, default = 0, help='Retries for testing the port')
+	parser.add_argument('-p', '--port', action='append', required= True, help='port to scan / port range to scan / port range file. can be stacked')
+	parser.add_argument('--timeout', type = int, default = None, help='Scan retries sleep time')
+	parser.add_argument('-r', '--retries', type = int, default = 1, help='Retries for testing the port')
 	parser.add_argument('-w', '--worker-count', type = int, default = 1, help='Parallelism')
 	parser.add_argument('-v', '--verbose', action='count', default=0)
-	parser.add_argument('targets', nargs='+', help='IP address / IP range (CDIR) / targets file')
+	parser.add_argument('-t', '--target', action='append', required=True, help='IP address / IP range (CDIR) / targets file')
+	parser.add_argument('proxies', nargs='*', help='connection string(s) of the target proxy. if you want a chain of proxies')
+
 
 	args = parser.parse_args()
 
@@ -325,14 +321,14 @@ def main():
 	elif args.verbose > 2:
 		logger.setLevel(1)
 
-	url = SocksClientURL.from_url(args.proxy_connection_string)
-	scanner = SOCKSPortscan(url)
+	proxychain = SocksClientURL.from_urls(args.proxies)
+	scanner = SOCKSPortscan(proxychain)
 	scanner.max_retries = args.retries
 	scanner.retries_timeout = args.timeout
 	scanner.worker_cnt = args.worker_count
 
 	notfile = []
-	for target in args.targets:
+	for target in args.target:
 		try:
 			f = open(target, 'r')
 			f.close()
@@ -348,7 +344,7 @@ def main():
 		return
 
 	notfile = []
-	for target in args.ports:
+	for target in args.port:
 		try:
 			f = open(target, 'r')
 			f.close()

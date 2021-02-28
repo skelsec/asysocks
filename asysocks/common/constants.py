@@ -2,11 +2,16 @@ import enum
 
 class SocksServerVersion(enum.Enum):
 	SOCKS4 = 'SOCKS4'
+	SOCKS4A = 'SOCKS4A'
+	SOCKS4AS = 'SOCKS4AS'
 	SOCKS5 = 'SOCKS5'
 	SOCKS5S = 'SOCKS5S'
 	SOCKS4S = 'SOCKS4S'
 	HTTP = 'HTTP'
 	HTTPS = 'HTTPS'
+	WSNET = 'WSNET'
+	WSNETWS = 'WSNETWS'
+	WSNETWSS = 'WSNETWSS'
 
 class SocksProtocol(enum.Enum):
 	TCP = 'TCP'

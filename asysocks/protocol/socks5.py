@@ -8,8 +8,7 @@ import ipaddress
 import socket
 import asyncio
 
-from asysocks.common.aiowrappers import read_or_exc
-from asysocks.common.constants import SOCKS5Method 
+from asysocks.common.constants import SOCKS5Method
 
 
 class SOCKS5ServerState(enum.Enum):
@@ -297,7 +296,7 @@ class SOCKS5NegoReply:
 			data += temp
 			if len(data) >= total_size:
 				break
-		print(data)
+		
 		return SOCKS5NegoReply.from_bytes(data)
 
 	@staticmethod
@@ -476,14 +475,14 @@ class SOCKS5Reply:
 
 			if len(data) > 4:
 				rt = SOCKS5AddressType(data[3])
-				print(rt)
+				
 				if rt == SOCKS5AddressType.IP_V4:
 					total_size = 4 + 2 + 4
 				if rt == SOCKS5AddressType.IP_V6:
 					total_size = 4 + 2 + 16
 				if rt == SOCKS5AddressType.DOMAINNAME:
 					total_size = 4 + 2 + data[4]
-				print(total_size)
+				
 			if len(data) >= total_size:
 				break
 

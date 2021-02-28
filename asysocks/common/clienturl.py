@@ -31,6 +31,7 @@ clienturl_param2var = {
 	'pass' : ('password', [str]),
 	'authtype' : ('authtype', [SOCKS5Method]),
 	'userid' : ('userid', [str]),
+	'agentid' : ('agentid', [str]),
 
 }
 
@@ -40,6 +41,7 @@ clienturl_url2var = {
 	'timeout' : ('timeout', int),
 	'buffersize' : ('buffer_size', int),
 	'userid' : ('userid', str),
+	'agentid' : ('agentid', str),
 }
 
 sockssslversions = {
@@ -65,6 +67,7 @@ class SocksClientURL:
 		
 		self.username = None
 		self.password = None
+		self.agentid = None
 
 
 	def get_creds(self):
@@ -88,13 +91,17 @@ class SocksClientURL:
 		target.endpoint_port = self.endpoint_port
 		target.endpoint_timeout = self.endpoint_timeout
 		target.ssl_ctx = self.ssl_ctx
+		target.credential = self.get_creds()
+		target.agentid = self.agentid
 		return target
 
 	def sanity_check(self):
-		if self.server_ip is None:
-			raise Exception('SOCKS server IP is missing!')
-		if self.server_port is None:
-			raise Exception('SOCKS server port is missing!')
+		if self.version != SocksServerVersion.WSNET:
+			if self.server_ip is None:
+				raise Exception('SOCKS server IP is missing!')
+			if self.server_port is None:
+				raise Exception('SOCKS server port is missing!')
+
 		if self.buffer_size <= 0:
 			raise Exception('buffer_size is too low! %s' % self.buffer_size)
 		if self.endpoint_ip is None:
@@ -102,11 +109,27 @@ class SocksClientURL:
 		#if self.endpoint_port is None:
 		#	raise Exception('Endpoint port is missing!')
 
-	
+	@staticmethod
+	def from_urls(urls, endpoint_ip = None, endpoint_port = None):
+		proxylist = []
+		first = True
+		prevtarget = None
+		for url in urls[::-1]:
+			res = SocksClientURL.from_url(url).get_target()
+			if first is True:
+				res.endpoint_ip = endpoint_ip
+				res.endpoint_port = endpoint_port
+				first = False
+			else:
+				res.endpoint_ip = prevtarget.server_ip
+				res.endpoint_port = prevtarget.server_port
+			prevtarget = res
+			proxylist.append(res)
+
+		return proxylist[::-1]
+
 	@staticmethod
 	def from_url(url_str):
-		# socks5://user:pass@ip:port/?
-
 		res = SocksClientURL()
 		url_e = urlparse(url_str)
 
@@ -126,11 +149,19 @@ class SocksClientURL:
 			res.server_port = 1080
 		elif res.version == SocksServerVersion.SOCKS4S:
 			res.server_port = 1080
+		elif res.version == SocksServerVersion.SOCKS4A:
+			res.server_port = 1080
+		elif res.version == SocksServerVersion.SOCKS4AS:
+			res.server_port = 1080
+		elif res.version == SocksServerVersion.WSNET:
+			res.server_port = None
+
 		res.username = url_e.username
 		res.password = url_e.password
 		if res.version in sockssslversions:
 			res.ssl_ctx = ssl.create_default_context()
-
+		
+		print(url_e)
 		if url_e.query is not None:
 			query = parse_qs(url_e.query)
 			for k in query:
@@ -146,39 +177,97 @@ class SocksClientURL:
 		"""
 
 		"""
-		res = SocksClientURL()
+		lastproxy = SocksClientURL()
 		url = urlparse(url_str)
-		res.endpoint_ip = url.hostname
+		lastproxy.endpoint_ip = url.hostname
 		if url.port:
-			res.endpoint_port = int(url.port)
+			lastproxy.endpoint_port = int(url.port)
 		if url.query is not None:
 			query = parse_qs(url.query)
 
+			proxycounts = [0]
+			proxynums = {'0' : None}
 			for k in query:
 				if k.startswith('proxy'):
-					if k[5:] in clienturl_param2var:
+					try:
+						int(k[5])
+						if k[5] not in proxynums:
+							proxynums[k[5]] = None
+							proxycounts.append(int(k[5]))
+					except Exception as e:
+						#print(e)
+						pass
+			#print(proxynums)
+			#print(proxycounts)
+			if len(proxycounts) != len(proxynums):
+				raise Exception('proxyies are not in sequential order! ERROR!')
 
-						data = query[k][0]
-						for c in clienturl_param2var[k[5:]][1]:
-							#print(c)
-							data = c(data)
+			proxycounts.sort()
+			firstiter = True
+			prevproxy = lastproxy
+			for i in proxycounts[::-1]:
+				pdata = SocksClientURL()
+				if firstiter is True:
+					firstiter = False
+					pdata = lastproxy
+				else:
+					pdata.endpoint_ip = prevproxy.server_ip
+					pdata.endpoint_port = prevproxy.server_port
+					prevproxy = pdata
+				startstring = 'proxy%s' % i
+				if i == 0:
+					startstring = 'proxy'
+				for k in query:
+					if k.startswith(startstring):
+						startpos = 6
+						if i == 0:
+							startpos = 5
+												
+						if k[startpos:] in clienturl_param2var:
+							data = query[k][0]
+							for c in clienturl_param2var[k[startpos:]][1]:
+								#print(c)
+								data = c(data)
 
-						setattr(
-							res, 
-							clienturl_param2var[k[5:]][0], 
-							data
-						)
+							setattr(
+								pdata, 
+								clienturl_param2var[k[startpos:]][0], 
+								data
+							)
+				proxynums[str(i)] = pdata
+
+		if len(proxynums) > 1:
+			for k in proxynums:
+				if proxynums[k].version in sockssslversions:
+					raise Exception('SSL in proxy chaining not supported! That would be a lot of work...')
+		else:
+			if proxynums['0'].version in sockssslversions:
+				proxynums['0'].ssl_ctx = ssl.create_default_context()
+
 		
-		if res.version in sockssslversions:
-			res.ssl_ctx = ssl.create_default_context()
-
-		res.sanity_check()
+		for k in proxynums:
+			proxynums[k].sanity_check()
 		
+		targets = []
+		for i in proxycounts:
+			targets.append(proxynums[str(i)].get_target())
 
-		return res
+		return targets
 
 
 
+if __name__ == '__main__':
 
+	url = 'http://alma.com:80/haha?proxytype=socks5&proxyport=66&proxyhost=127.0.0.1'
+	url = 'http://alma.com:80/haha?proxytype=socks5&proxyport=66&proxyhost=127.0.0.1&proxy1type=socks4&proxy1port=9876&proxy1host=255.255.0.0'
+	#url = 'http://alma.com:80/haha?proxytype=socks5&proxyport=66&proxyhost=127.0.0.1&proxy2type=socks4&proxy2port=9876&proxy2host=255.255.0.0'
+	#url = 'http://alma.com:80/haha?proxytype=socks5&proxyport=66&proxyhost=127.0.0.1&proxy2type=socks4&proxy2port=9876&proxy2host=255.255.0.0&proxy1type=socks5s&proxy1port=6666&proxy1host=127.255.0.0'
+	url = 'http://alma.com:80/haha?proxytype=socks5&proxyport=66&proxyhost=127.0.0.1&proxy2type=socks4&proxy2port=9876&proxy2host=255.255.0.0&proxy1type=socks5&proxy1port=6666&proxy1host=127.255.0.0'
+	
+	o = urlparse(url)
+	res = SocksClientURL.from_params(url)
+	print('aaaaaaaaaaaaaaaaaaaa')
+	for target in res:
+		print(target.__dict__)
 
 						
