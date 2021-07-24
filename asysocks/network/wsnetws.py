@@ -1,4 +1,4 @@
-from pyodidewsnet.clientws import WSNetworkWS
+from wsnet.pyodide.client import WSNetworkWS
 from asysocks.common.constants import SocksServerVersion
 import asyncio
 from asysocks import logger

@@ -1,4 +1,4 @@
-from pyodidewsnet.client import WSNetworkTCP
+from wsnet.pyodide.client import WSNetworkTCP
 import asyncio
 
 # This code only works properly in the conditions met in this specific library.
