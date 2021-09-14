@@ -161,7 +161,7 @@ class SocksClientURL:
 		if res.version in sockssslversions:
 			res.ssl_ctx = ssl.create_default_context()
 		
-		print(url_e)
+		#print(url_e)
 		if url_e.query is not None:
 			query = parse_qs(url_e.query)
 			for k in query:
