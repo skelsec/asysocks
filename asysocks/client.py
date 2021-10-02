@@ -1,6 +1,7 @@
 
 import asyncio
 import base64
+import traceback
 
 from asysocks import logger
 from asysocks.common.constants import SocksServerVersion, SocksCommsMode
@@ -8,6 +9,7 @@ from asysocks.protocol.http import HTTPResponse, HTTPProxyAuthRequiredException,
 from asysocks.protocol.socks4 import SOCKS4Request, SOCKS4Reply, SOCKS4CDCode
 from asysocks.protocol.socks4a import SOCKS4ARequest, SOCKS4AReply, SOCKS4ACDCode
 from asysocks.protocol.socks5 import SOCKS5Method, SOCKS5Nego, SOCKS5NegoReply, SOCKS5Request, SOCKS5Reply, SOCKS5ReplyType, SOCKS5PlainAuth, SOCKS5PlainAuthReply, SOCKS5ServerErrorReply, SOCKS5AuthFailed
+from asysocks.utils.sslwrapper import SSLWrapper
 
 class SocksTunnelError(Exception):
 	def __init__(self, innerexception, message="Something failed setting up the tunnel! See innerexception for more details"):
@@ -25,9 +27,11 @@ class SOCKSClient:
 		self.proxytask_in = None
 		self.proxytask_out = None
 		self.proxy_stopped_evt = None
+		self.proxy_running_evt = None
 		self.http_auth_ctx = None
 		self.bind_progress_evt = bind_evt
 		self.bind_port = None
+		self.ssl_wrapper = None
 		self.channel_open_evt = channel_open_evt
 	
 	async def terminate(self):
@@ -38,6 +42,9 @@ class SOCKSClient:
 		if self.proxytask_out is not None:
 			self.proxytask_out.cancel()
 
+	def get_peercert(self):
+		if self.ssl_wrapper is not None:
+			return self.ssl_wrapper.get_server_cert()
 
 	@staticmethod
 	async def proxy_stream(in_stream, out_stream, proxy_stopped_evt, buffer_size = 4096, timeout = None):
@@ -123,7 +130,7 @@ class SOCKSClient:
 			await out_queue.put((None, Exception('proxy_queue_out got cancelled!')))
 			return
 		except Exception as e:
-			logger.debug('')
+			logger.debug('proxy_queue_out exception %s' % e)
 			try:
 				await out_queue.put((None, e))
 			except:
@@ -591,23 +598,51 @@ class SOCKSClient:
 			logger.debug('[queue] Starting proxy...')
 			
 			self.proxy_stopped_evt = asyncio.Event()
-			self.proxytask_in = asyncio.create_task(
-				SOCKSClient.proxy_queue_in(
-					self.comms.in_queue, 
-					remote_writer, 
-					self.proxy_stopped_evt, 
-					buffer_size = self.proxies[-1].buffer_size
+			if self.comms.wrap_ssl is False:
+				self.proxytask_in = asyncio.create_task(
+					SOCKSClient.proxy_queue_in(
+						self.comms.in_queue, 
+						remote_writer, 
+						self.proxy_stopped_evt, 
+						buffer_size = self.proxies[-1].buffer_size
+					)
 				)
-			)
-			self.proxytask_out = asyncio.create_task(
-				SOCKSClient.proxy_queue_out(
-					self.comms.out_queue, 
-					remote_reader, 
-					self.proxy_stopped_evt, 
-					buffer_size = self.proxies[-1].buffer_size, 
-					timeout = self.proxies[-1].endpoint_timeout
+				self.proxytask_out = asyncio.create_task(
+					SOCKSClient.proxy_queue_out(
+						self.comms.out_queue, 
+						remote_reader, 
+						self.proxy_stopped_evt, 
+						buffer_size = self.proxies[-1].buffer_size, 
+						timeout = self.proxies[-1].endpoint_timeout
+					)
 				)
-			)
+			else:
+				transport_in = asyncio.Queue()
+				transport_out = asyncio.Queue()
+				self.proxytask_in = asyncio.create_task(
+					SOCKSClient.proxy_queue_in(
+						transport_out,
+						remote_writer,
+						self.proxy_stopped_evt,
+						buffer_size = self.proxies[-1].buffer_size
+					)
+				)
+				self.proxytask_out = asyncio.create_task(
+					SOCKSClient.proxy_queue_out(
+						transport_in,
+						remote_reader,
+						self.proxy_stopped_evt,
+						buffer_size = self.proxies[-1].buffer_size, 
+						timeout = self.proxies[-1].endpoint_timeout
+					)
+				)
+
+				self.ssl_wrapper, err = await SSLWrapper.from_commsettings(self.comms, transport_in, transport_out)
+				if err is not None:
+					raise err
+				await asyncio.wait_for(self.ssl_wrapper.handshake_done_evt.wait(), timeout = self.comms.handshake_timeout)
+				
+			self.proxy_running_evt.set()
 			logger.debug('[queue] Proxy started!')
 			await self.proxy_stopped_evt.wait()
 			logger.debug('[queue] Proxy stopped!')
@@ -622,11 +657,13 @@ class SOCKSClient:
 			return False, e
 		
 		finally:
+			self.proxy_running_evt.set()
 			if remote_writer is not None:
 				remote_writer.close()
 
 
-	async def run(self):
+	async def run(self, noblock = False):
+		self.proxy_running_evt = asyncio.Event()
 		if isinstance(self.proxies, list) is False and (self.proxies.is_bind is True and self.bind_progress_evt is None):
 			self.bind_progress_evt = asyncio.Event()
 		
@@ -641,8 +678,15 @@ class SOCKSClient:
 
 			)
 			logger.debug('[PROXY] Awaiting server task now...')
-			await server.serve_forever()
-
+			self.proxy_running_evt.set()
+			if noblock is False:
+				await server.serve_forever()
+			return server.serve_forever()
 		else:
-			await self.handle_queue()
+			if noblock is False:
+				await self.handle_queue()
+			else:
+				return self.handle_queue()
+
+
 		
