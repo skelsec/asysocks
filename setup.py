@@ -46,6 +46,7 @@ setup(
 		"Operating System :: OS Independent",
 	),
 	install_requires=[
+		'asn1crypto',
 	],
 	entry_points={
 		'console_scripts': [
