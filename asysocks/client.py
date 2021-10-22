@@ -409,15 +409,23 @@ class SOCKSClient:
 				try:
 					for i, proxy in enumerate(self.proxies):
 						if proxy.version in [SocksServerVersion.SOCKS4, SocksServerVersion.SOCKS4S]:
-							_, err = await self.run_socks4(proxy, remote_reader, remote_writer)
+							try:
+								x = await asyncio.wait_for(self.run_socks4(proxy, remote_reader, remote_writer), timeout=self.proxies[-1].timeout)
+							except asyncio.TimeoutError:
+								raise Exception('Proxy Connection establishment timeout')
+							_, err = x
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
 								raise err
 							continue
 
-						elif proxy.version in [SocksServerVersion.SOCKS4A]:
-							_, err = await self.run_socks4a(proxy, remote_reader, remote_writer)
+						elif proxy.version in [SocksServerVersion.SOCKS4A, SocksServerVersion.SOCKS4AS]:
+							try:
+								x = await asyncio.wait_for(self.run_socks4a(proxy, remote_reader, remote_writer), timeout=self.proxies[-1].timeout)
+							except asyncio.TimeoutError:
+								raise Exception('Proxy Connection establishment timeout')
+							_, err = x
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
@@ -425,7 +433,11 @@ class SOCKSClient:
 							continue
 
 						elif proxy.version in [SocksServerVersion.SOCKS5, SocksServerVersion.SOCKS5S]:
-							_, err = await self.run_socks5(proxy, remote_reader, remote_writer)
+							try:
+								x = await asyncio.wait_for(self.run_socks5(proxy, remote_reader, remote_writer), timeout=self.proxies[-1].timeout)
+							except asyncio.TimeoutError:
+								raise Exception('Proxy Connection establishment timeout')
+							_, err = x
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
@@ -433,7 +445,11 @@ class SOCKSClient:
 							continue
 							
 						elif proxy.version in [SocksServerVersion.HTTP, SocksServerVersion.HTTPS]:
-							_, self.http_auth_ctx, err = await self.run_http(proxy, remote_reader, remote_writer, http_auth_ctx = self.http_auth_ctx)
+							try:
+								x = await asyncio.wait_for(self.run_http(proxy, remote_reader, remote_writer, http_auth_ctx = self.http_auth_ctx), timeout=self.proxies[-1].timeout)
+							except asyncio.TimeoutError:
+								raise Exception('Proxy Connection establishment timeout')
+							_, self.http_auth_ctx, err = x 
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
@@ -540,15 +556,23 @@ class SOCKSClient:
 				try:
 					for i, proxy in enumerate(self.proxies):
 						if proxy.version in [SocksServerVersion.SOCKS4, SocksServerVersion.SOCKS4S]:
-							_, err = await self.run_socks4(proxy, remote_reader, remote_writer)
+							try:
+								x = await asyncio.wait_for(self.run_socks4(proxy, remote_reader, remote_writer), timeout=self.proxies[-1].timeout)
+							except asyncio.TimeoutError:
+								raise Exception('Proxy Connection establishment timeout')
+							_, err = x
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
 								raise err
 							continue
 
-						elif proxy.version in [SocksServerVersion.SOCKS4A]:
-							_, err = await self.run_socks4a(proxy, remote_reader, remote_writer)
+						elif proxy.version in [SocksServerVersion.SOCKS4A, SocksServerVersion.SOCKS4S]:
+							try:
+								x = await asyncio.wait_for(self.run_socks4a(proxy, remote_reader, remote_writer), timeout=self.proxies[-1].timeout)
+							except asyncio.TimeoutError:
+								raise Exception('Proxy Connection establishment timeout')
+							_, err = x
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
@@ -556,7 +580,11 @@ class SOCKSClient:
 							continue
 
 						elif proxy.version in [SocksServerVersion.SOCKS5, SocksServerVersion.SOCKS5S]:
-							_, err = await self.run_socks5(proxy, remote_reader, remote_writer)
+							try:
+								x = await asyncio.wait_for(self.run_socks5(proxy, remote_reader, remote_writer), timeout=self.proxies[-1].timeout)
+							except asyncio.TimeoutError:
+								raise Exception('SOCKS5 Connection establishment timeout')
+							_, err = x
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
@@ -564,7 +592,11 @@ class SOCKSClient:
 							continue
 							
 						elif proxy.version in [SocksServerVersion.HTTP, SocksServerVersion.HTTPS]:
-							_, self.http_auth_ctx, err = await self.run_http(proxy, remote_reader, remote_writer, http_auth_ctx = self.http_auth_ctx)
+							try:
+								x = await asyncio.wait_for(self.run_http(proxy, remote_reader, remote_writer, http_auth_ctx = self.http_auth_ctx), timeout=self.proxies[-1].timeout)
+							except asyncio.TimeoutError:
+								raise Exception('SOCKS5 Connection establishment timeout')
+							_, self.http_auth_ctx, err = x
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
 									raise SocksTunnelError(err)
