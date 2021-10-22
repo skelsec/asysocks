@@ -38,7 +38,7 @@ clienturl_param2var = {
 clienturl_url2var = {
 	'isbind' : ('is_bind', bool),
 	'proto' : ('proto', SocksProtocol),
-	'timeout' : ('timeout', int),
+	'timeout' : ('endpoint_timeout', int),
 	'buffersize' : ('buffer_size', int),
 	'userid' : ('userid', str),
 	'agentid' : ('agentid', str),
