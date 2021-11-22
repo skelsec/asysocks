@@ -374,6 +374,7 @@ class SOCKSClient:
 					remote_writer.close()
 				
 				try:
+					
 					if self.proxies[0].version == SocksServerVersion.WSNET:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(
@@ -391,6 +392,8 @@ class SOCKSClient:
 							self.proxies[0].agentid,
 							self.proxies[0].timeout,
 						)
+						if remote_reader is None:
+							raise remote_writer
 					else:
 						remote_reader, remote_writer = await asyncio.wait_for(
 							asyncio.open_connection(
@@ -539,6 +542,8 @@ class SOCKSClient:
 							self.proxies[0].agentid,
 							self.proxies[0].timeout,
 						)
+						if remote_reader is None:
+							raise remote_writer
 					else:
 						remote_reader, remote_writer = await asyncio.wait_for(
 							asyncio.open_connection(

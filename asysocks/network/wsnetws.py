@@ -1,6 +1,7 @@
-from wsnet.pyodide.client import WSNetworkWS
+from wsnet.operator.networkproxy import WSNetworkWS
 from asysocks.common.constants import SocksServerVersion
 import asyncio
+import traceback
 from asysocks import logger
 
 # This code only works properly in the conditions met in this specific library.
@@ -12,29 +13,34 @@ from asysocks import logger
 class WSNETNetworkWS:
 	@staticmethod
 	async def open_connection(target_host, target_port, host, port, proto, agentid = None, timeout = None):
-		out_queue = asyncio.Queue()
-		in_queue = asyncio.Queue()
-		closed_event = asyncio.Event()
+		try:
+			out_queue = asyncio.Queue()
+			in_queue = asyncio.Queue()
+			closed_event = asyncio.Event()
 
-		proto = 'ws'
-		if proto == SocksServerVersion.WSNETWSS:
-			proto = 'wss'
-		
-		url = '%s://%s:%s/' % (proto, host, port)
-		logger.debug('WSNETNetworkWS URL: %s' % url)
-		logger.debug('WSNETNetworkWS AGENTID: %s' % agentid)
-		agentid = bytes.fromhex(agentid)
+			proto = 'ws'
+			if proto == SocksServerVersion.WSNETWSS:
+				proto = 'wss'
+			
+			url = '%s://%s:%s/' % (proto, host, port)
+			logger.debug('WSNETNetworkWS URL: %s' % url)
+			logger.debug('WSNETNetworkWS AGENTID: %s' % agentid)
+			agentid = bytes.fromhex(agentid)
 
-		client = WSNetworkWS(target_host, target_port, url, in_queue, out_queue, agentid)
-		_, err = await asyncio.wait_for(client.run(), timeout)
-		if err is not None:
-			raise err
-		writer = WSNETWriter(out_queue, closed_event, client)
-		reader = WSNETReader(in_queue, closed_event)
-		await writer.run()
-		await reader.run()
-		
-		return reader, writer
+			client = WSNetworkWS(target_host, target_port, url, in_queue, out_queue, agentid)
+			_, err = await asyncio.wait_for(client.run(), timeout)
+			if err is not None:
+				raise err
+			writer = WSNETWriter(out_queue, closed_event, client)
+			reader = WSNETReader(in_queue, closed_event)
+			await writer.run()
+			await reader.run()
+			
+			return reader, writer
+		except Exception as e:
+			print('WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWw')
+			traceback.print_exc()
+			return None, e
 
 class WSNETWriter:
 	def __init__(self, out_queue, closed_event, client):
@@ -43,6 +49,7 @@ class WSNETWriter:
 		self.client = client
 
 	def write(self, data):
+		#print('THIS IS DATA: %s' % data)
 		self.out_queue.put_nowait(data)
 
 	def close(self):
@@ -105,7 +112,10 @@ class WSNETReader:
 		try:
 			#print('read')
 			if self.closed_event.is_set():
-				return b''
+				data = self.buffer
+				#print('read ret %s' % data)
+				self.buffer = b''
+				return data
 
 			if len(self.buffer) == 0:
 				evt = asyncio.Event()
