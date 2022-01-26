@@ -1,5 +1,19 @@
+![Supported Python versions](https://img.shields.io/badge/python-3.7+-blue.svg) [![Twitter](https://img.shields.io/twitter/follow/skelsec?label=skelsec&style=social)](https://twitter.com/intent/follow?screen_name=skelsec)
+
+:triangular_flag_on_post: This is the public repository of aardwolf, for latest version and updates please consider supporting us through https://porchetta.industries/
+
 # asysocks
 Asynchronous Socks5 / Socks4 / HTTP proxy client and server library in pure python.
+
+## :triangular_flag_on_post: Sponsors
+
+If you want to sponsors this project and have the latest updates on this project, latest issues fixed, latest features, please support us on https://porchetta.industries/
+
+## Official Discord Channel
+
+Come hang out on Discord!
+
+[![Porchetta Industries](https://discordapp.com/api/guilds/736724457258745996/widget.png?style=banner3)](https://discord.gg/ycGXUxy)
 
 ## what is?
 The primary goal of this project to act as a universal proxy clinet/server library which you can use in your projects.  
