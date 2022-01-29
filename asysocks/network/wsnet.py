@@ -9,12 +9,12 @@ import asyncio
 
 class WSNETNetwork:
 	@staticmethod
-	async def open_connection(host, port):
+	async def open_connection(host, port, wsnet_reuse = False):
 		out_queue = asyncio.Queue()
 		in_queue = asyncio.Queue()
 		closed_event = asyncio.Event()
 
-		client = WSNetworkTCP(host, int(port), in_queue, out_queue)
+		client = WSNetworkTCP(host, int(port), in_queue, out_queue, wsnet_reuse)
 		_, err = await client.run()
 		if err is not None:
 			raise err

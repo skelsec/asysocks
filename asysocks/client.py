@@ -378,8 +378,9 @@ class SOCKSClient:
 					if self.proxies[0].version == SocksServerVersion.WSNET:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(
-							self.proxies[0].endpoint_ip, 
-							self.proxies[0].endpoint_port
+							self.proxies[0].endpoint_ip,
+							self.proxies[0].endpoint_port,
+							self.proxies[0].wsnet_reuse,
 						)
 					elif self.proxies[0].version in [SocksServerVersion.WSNETWS, SocksServerVersion.WSNETWSS]:
 						from asysocks.network.wsnetws import WSNETNetworkWS
@@ -529,7 +530,8 @@ class SOCKSClient:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(
 							self.proxies[0].endpoint_ip, 
-							self.proxies[0].endpoint_port
+							self.proxies[0].endpoint_port,
+							self.proxies[0].wsnet_reuse,
 						)
 					elif self.proxies[0].version in [SocksServerVersion.WSNETWS, SocksServerVersion.WSNETWSS]:
 						from asysocks.network.wsnetws import WSNETNetworkWS

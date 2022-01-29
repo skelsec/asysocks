@@ -60,6 +60,7 @@ class SocksClientURL:
 		self.timeout = 10
 		self.buffer_size = 4096
 		self.ssl_ctx = None
+		self.wsnet_reuse = False
 		
 		self.endpoint_ip = None
 		self.endpoint_port = None
@@ -93,6 +94,7 @@ class SocksClientURL:
 		target.ssl_ctx = self.ssl_ctx
 		target.credential = self.get_creds()
 		target.agentid = self.agentid
+		target.wsnet_reuse = self.wsnet_reuse
 		return target
 
 	def sanity_check(self):

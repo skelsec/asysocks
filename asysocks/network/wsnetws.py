@@ -38,7 +38,7 @@ class WSNETNetworkWS:
 			
 			return reader, writer
 		except Exception as e:
-			print('WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWw')
+			print('W')
 			traceback.print_exc()
 			return None, e
 
