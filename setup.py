@@ -47,6 +47,7 @@ setup(
 	),
 	install_requires=[
 		'asn1crypto',
+		'cryptography',
 	],
 	entry_points={
 		'console_scripts': [
