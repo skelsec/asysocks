@@ -1,22 +1,22 @@
 import asyncio
+import platform
 import traceback
 import logging
-import ssl
+from mbedtls import tls
+
 
 
 
 from asn1crypto.x509 import Certificate
 
-class SSLWrapper:
+class MBEDTLSWrapper:
 	def __init__(self):
 		self.comms = None
 		self.transport_in = None
 		self.transport_out = None
 		self.ssl_ctx = None
-		self.transport = None
-		self.ssl_in_buff = None
-		self.ssl_out_buff = None
 		self.ssl_obj = None
+		self.transport = None
 		self.handshake_done_evt = None
 		self.handshake_timeout = 10
 		self.__ssl_in_q = None
@@ -60,19 +60,19 @@ class SSLWrapper:
 			self.handshake_done_evt = asyncio.Event()
 			self.stop_evt = asyncio.Event()
 			self.__ssl_in_q = asyncio.Queue()
-			self.ssl_in_buff = ssl.MemoryBIO()
-			self.ssl_out_buff = ssl.MemoryBIO()
-			self.ssl_obj = self.ssl_ctx.wrap_bio(self.ssl_in_buff, self.ssl_out_buff, server_side=False, server_hostname = None)
+			self.ssl_obj = self.ssl_ctx.wrap_buffers(None)
 			_, err = await self.__do_handshake()
 			if err is not None:
 				raise err
-			self.server_certificate = self.ssl_obj.getpeercert(binary_form=True)
+			self.server_certificate = self.ssl_ctx.getpeercert(binary_form=True)
+			print(self.server_certificate)
 			self.__enc_task = asyncio.create_task(self.__encrypt_ssl_rec())
 			self.__dec_task = asyncio.create_task(self.__decrypt_ssl_rec())
 			self.__process_task = asyncio.create_task(self.__read_ssl_record())
 			return True, None
 
 		except Exception as e:
+			traceback.print_exc()
 			return None, e
 	
 	async def __encrypt_ssl_rec(self):
@@ -87,18 +87,21 @@ class SSLWrapper:
 					self.ssl_obj.write(raw_data)
 					while True:
 						try:
-							enc_data = self.ssl_out_buff.read()
+							enc_data = self.ssl_obj.peek_outgoing(16384)
 							if enc_data == b'':
 								break
 							await self.transport_out.put(enc_data)
+							self.ssl_obj.consume_outgoing(len(enc_data))
 						except Exception as e:
 							raise e
 				except Exception as e:
-							raise e
+					raise e
 
 		except asyncio.CancelledError:
 			return
 		except Exception as e:
+			traceback.print_exc()
+			print('__encrypt_ssl_rec %s' % e)
 			logging.debug('__encrypt_ssl_rec %s' % e)
 	
 	async def __decrypt_ssl_rec(self):
@@ -112,14 +115,15 @@ class SSLWrapper:
 					await self.comms.out_queue.put((ssl_data, None))
 					#print('Connection terminated')
 					return
-				self.ssl_in_buff.write(ssl_data)
+				self.ssl_obj.receive_from_network(ssl_data)
 
 				data_buff = b''
 				while not self.stop_evt.is_set():
 					try:
-						data_buff += self.ssl_obj.read()
-					except ssl.SSLWantReadError:
-						break
+						data_read = self.ssl_obj.read(16384)
+						if data_read == b'':
+							break
+						data_buff += data_read
 					except Exception as e:
 						raise e
 				#print('data_buff %s' % data_buff)
@@ -129,6 +133,7 @@ class SSLWrapper:
 		except asyncio.CancelledError:
 			return
 		except Exception as e:
+			traceback.print_exc()
 			logging.debug('__decrypt_ssl_rec %s' % e)
 
 	async def __read_ssl_record(self):
@@ -162,6 +167,7 @@ class SSLWrapper:
 			return
 
 		except Exception as e:
+			traceback.print_exc()
 			logging.debug('__read_ssl_record %s' % e)
 			await self.__ssl_in_q.put(b'')
 
@@ -171,67 +177,64 @@ class SSLWrapper:
 	async def __do_handshake(self):
 		try:
 			ctr = 0
-			while not self.stop_evt.is_set():
+			while not self.stop_evt.is_set() and self.ssl_obj.context._state is not tls.HandshakeStep.HANDSHAKE_OVER:
 				ctr += 1
-				#print('DST Performing handshake!')
+				if ctr == 1000:
+					raise Exception('Handshake broke :(')
+				print('DST Performing handshake!')
 				try:
 					self.ssl_obj.do_handshake()
-				except ssl.SSLWantReadError:
-					#print('DST want %s' % ctr)
-					while True:
-						client_hello = self.ssl_out_buff.read()
-						if client_hello != b'':
-							#print('DST client_hello %s' % len(client_hello))
-							await self.transport_out.put(client_hello)
-						else:
-							break
-					
-					#print('DST wating server hello %s' % ctr)
+					data = self.ssl_obj.peek_outgoing(1024)
+					if len(data) == 0:
+						continue
+					await self.transport_out.put(data)
+					self.ssl_obj.consume_outgoing(len(data))
+				except tls.WantReadError:
+					print('WantReadError %s' % ctr)
+					data = self.ssl_obj.peek_outgoing(1024)
+					if len(data) == 0:
+						continue
+					await self.transport_out.put(data)
+					self.ssl_obj.consume_outgoing(len(data))
+					continue
+				
+				except tls.WantWriteError:
+					print('WantWriteError %s' % ctr)
 					server_hello, err = await self.transport_in.get()
 					if err is not None:
 						raise err
 					if server_hello == b'':
 						raise Exception('Server closed the connection!')
-					#print('DST server_hello %s' % len(server_hello))
-					self.ssl_in_buff.write(server_hello)
+					self.ssl_obj.receive_from_network(server_hello)
 
 					continue
 				except:
-					raise
-				else:
-					#print('DST handshake ok %s' % ctr)
-					#server_fin = tls_out_buff.read()
-					#print('DST server_fin %s ' %  server_fin)
-					#await out_q.put(server_fin)
-					break			
+					raise	
 			
 			self.handshake_done_evt.set()
 			return True, None
 
 		except Exception as e:
+			traceback.print_exc()
 			logging.debug('__do_handshake %s' % e)
 			return None, e
 
 	@staticmethod
 	async def from_commsettings(comms, transport_in, transport_out):
 		try:
-			tunnel = SSLWrapper()
+			tunnel = MBEDTLSWrapper()
 			tunnel.transport_in = transport_in
 			tunnel.transport_out = transport_out
 			tunnel.comms = comms
 			tunnel.handshake_timeout = comms.handshake_timeout
-			if comms.ssl_ctx is not None:
-				tunnel.ssl_ctx = comms.ssl_ctx
-			#elif comms.ssl_cert is not None:
-			#	raise NotImplementedError()
-			else:
-				tunnel.ssl_ctx = ssl.create_default_context()
-				tunnel.ssl_ctx.check_hostname = False
-				tunnel.ssl_ctx.verify_mode = ssl.CERT_NONE
+			tunnel.ssl_ctx = tls.ClientContext(tls.TLSConfiguration(
+				validate_certificates=False,
+			))
 			_, err = await tunnel.setup()
 			if err is not None:
 				raise err
 
 			return tunnel, None
 		except Exception as e:
+			traceback.print_exc()
 			return None, e

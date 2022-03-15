@@ -52,25 +52,25 @@ class WSNETReader:
 		self.in_queue = in_queue
 		self.closed_event = closed_event
 		self.buffer = b''
-		self.data_in_evt = []
+		self.data_in_evt = asyncio.Event()
 		self.err = None
+		self.bufferlock = asyncio.Lock()
 
 	async def __handle_in(self):
 		while True:
 			res, self.err = await self.in_queue.get()
 			if self.err is not None:
-				if res is not None:
-					self.buffer += res
-					if len(self.data_in_evt) != 0:
-						evt = self.data_in_evt.pop()
-						evt.set()
+				if res is not None and res != b'':
+					self.buffer += res.data
+					self.data_in_evt.set()
 				self.closed_event.set()
 				return
 
 			self.buffer += res
-			if len(self.data_in_evt) != 0:
-				evt = self.data_in_evt.pop()
-				evt.set()
+			self.data_in_evt.set()
+			if res == b'':
+				break
+		self.closed_event.set()
 
 	async def run(self):
 		self.handle_task = asyncio.create_task(self.__handle_in())
@@ -82,15 +82,24 @@ class WSNETReader:
 			if self.closed_event.is_set():
 				return b''
 
-			if len(self.buffer) == 0:
-				evt = asyncio.Event()
-				self.data_in_evt.append(evt)
-				await evt.wait()
+			async with self.bufferlock:
+				if n == -1:
+					if len(self.buffer) == 0:
+						self.data_in_evt.clear()
+						await self.data_in_evt.wait()
 
 
-			temp = self.buffer[:n]
-			self.buffer = self.buffer[n:]
-			#print('read ret %s' % temp)
+					temp = self.buffer
+					self.buffer = b''
+				else:
+					if len(self.buffer) == 0:
+						self.data_in_evt.clear()
+						await self.data_in_evt.wait()
+					
+					temp = self.buffer[:n]
+					self.buffer = self.buffer[n:]
+					
+				#print('read ret %s' % temp)
 			return temp
 
 		except Exception as e:
@@ -106,16 +115,15 @@ class WSNETReader:
 			if n < 1:
 				raise Exception('Readexactly must be a positive integer!')
 
-			while len(self.buffer) < n:
-				#print('readexactly waiting...')
-				evt = asyncio.Event()
-				self.data_in_evt.append(evt)
-				await evt.wait()
-			
-			#print('self.buffer %s' % self.buffer)
-			temp = self.buffer[:n]
-			self.buffer = self.buffer[n:]
-			#print('readexactly ret %s' % temp)
+			async with self.bufferlock:
+				while len(self.buffer) < n:
+					self.data_in_evt.clear()
+					await self.data_in_evt.wait()
+				
+				#print('self.buffer %s' % self.buffer)
+				temp = self.buffer[:n]
+				self.buffer = self.buffer[n:]
+				#print('readexactly ret %s' % temp)
 			return temp
 
 		except Exception as e:
@@ -123,20 +131,20 @@ class WSNETReader:
 			self.closed_event.set()
 			raise
 
-	async def readuntil(self, pattern):
+	async def readuntil(self, separator = b'\n'):
 		try:
 			if self.closed_event.is_set():
 				raise Exception('Pipe broken!')
 
-			while self.buffer.find(pattern) == -1:
-				evt = asyncio.Event()
-				self.data_in_evt.append(evt)
-				await evt.wait()
-			
-			end = self.buffer.find(pattern)+len(pattern)
-			temp = self.buffer[:end]
-			self.buffer = self.buffer[end:]
-			#print('readuntil ret %s' % temp)
+			async with self.bufferlock:
+				while self.buffer.find(separator) == -1:
+					self.data_in_evt.clear()
+					await self.data_in_evt.wait()
+				
+				end = self.buffer.find(separator)+len(separator)
+				temp = self.buffer[:end]
+				self.buffer = self.buffer[end:]
+				#print('readuntil ret %s' % temp)
 			return temp
 
 		except Exception as e:
@@ -146,3 +154,6 @@ class WSNETReader:
 
 	async def readline(self):
 		return await self.readuntil(b'\n')
+	
+	def at_eof(self):
+		return self.closed_event.is_set() and len(self.buffer) == 0

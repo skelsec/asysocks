@@ -1,13 +1,7 @@
 
 
 from urllib.parse import urlparse, parse_qs
-import platform
-try:
-	import ssl
-except:
-	if platform.system() == 'Emscripten':
-		#pyodide doesnt support SSL for now.
-		pass
+import ssl
 
 
 from asysocks.common.credentials import SocksCredential

@@ -5,14 +5,8 @@ import socket
 import copy
 import ipaddress
 from urllib.parse import urlparse
-import platform
+import ssl
 
-try:
-	import ssl
-except:
-	if platform.system() == 'Emscripten':
-		#pyodide doesnt support SSL for now.
-		pass
 
 from asysocks.common.constants import SocksServerVersion, SocksCommsMode
 from asysocks.protocol.http import HTTPRequest
