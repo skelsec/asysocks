@@ -1,0 +1,171 @@
+import os
+import ssl
+import enum
+from typing import List
+from urllib.parse import urlparse, parse_qs
+
+def stru(x):
+	return str(x).upper()
+
+class UniProxyProto(enum.Enum):
+	CLIENT_SOCKS4 = 1
+	CLIENT_SSL_SOCKS4 = 2
+	CLIENT_SOCKS5_TCP = 3
+	CLIENT_SOCKS5_UDP = 4
+	CLIENT_SSL_SOCKS5_TCP = 5
+	CLIENT_SSL_SOCKS5_UDP = 6
+	CLIENT_HTTP = 7
+	CLIENT_SSL_HTTP = 8
+	CLIENT_WSNET = 9
+	CLIENT_WSNETWS = 9
+	CLIENT_SSL_WSNETWS = 11
+
+proxyshort_to_type = {
+	'SOCKS4' : UniProxyProto.CLIENT_SOCKS4,
+	'SOCKS4S' : UniProxyProto.CLIENT_SSL_SOCKS4,
+	'SOCKS5' : UniProxyProto.CLIENT_SOCKS5_TCP,
+	'SOCKS5U' : UniProxyProto.CLIENT_SOCKS5_UDP,
+	'SOCKS5S' : UniProxyProto.CLIENT_SSL_SOCKS5_TCP,
+	'HTTP' : UniProxyProto.CLIENT_HTTP,
+	'HTTPS' : UniProxyProto.CLIENT_SSL_HTTP,
+	'WSNET' : UniProxyProto.CLIENT_WSNET,
+	'WSNETWS' : UniProxyProto.CLIENT_WSNETWS,
+	'WSNETWSS' : UniProxyProto.CLIENT_SSL_WSNETWS,
+}
+
+def urlparam_proto(x):
+	return proxyshort_to_type[x.upper()]
+
+uniproxytarget_urlparams_param2var = {
+	'type' : ('protocol', [stru, urlparam_proto]),
+	'host' : ('server_ip', [str]),
+	'server' : ('server_ip', [str]),
+	'port' : ('server_port', [int]),
+	'bind' : ('is_bind', [bool]),
+	'timeout': ('timeout', [int]),
+	'etimeout' : ('endpoint_timeout', [int]),
+	'bsize' : ('buffer_size', [int]),
+	'user' : ('username', [str]),
+	'pass' : ('password', [str]),
+	#'authtype' : ('authtype', [SOCKS5Method]),
+	'userid' : ('userid', [str]),
+	'agentid' : ('agentid', [str]),
+}
+
+class UniProxyTarget:
+	def __init__(self):
+		self.server_ip:str = None
+		self.server_port:int = None
+		self.agentid:str = None
+		self.protocol:UniProxyProto = None
+		self.timeout:int = 10
+		self.ssl_ctx:ssl.SSLContext = None
+		self.credential = None
+		self.endpoint_ip:str = None
+		self.endpoint_port:int = None
+		self.wsnet_reuse:bool = False
+		self.userid = os.urandom(4).hex().encode('ascii')
+
+		self.only_open = False #These params used for security testing only! 
+		self.only_auth = False #These params used for security testing only!
+		self.only_bind = False #These params used for security testing only!
+	
+	def get_sname(self):
+		return '%s:%s' % (self.server_ip, self.server_port)
+
+	def get_tname(self):
+		return '%s:%s' % (self.endpoint_ip, self.endpoint_port)
+
+	def __repr__(self):
+		return str(self.__dict__)
+
+	def __str__(self):
+		t = '==== UniProxyTarget ====\r\n'
+		for k in self.__dict__:
+			t += '%s: %s\r\n' % (k, self.__dict__[k])
+			
+		return t
+
+	@staticmethod
+	def from_url_params(url_str, endpoint_port = None):
+		"""
+
+		"""
+		lastproxy = UniProxyTarget()
+		url = urlparse(url_str)
+		lastproxy.endpoint_ip = url.hostname
+		if url.port:
+			lastproxy.endpoint_port = int(url.port)
+		else:
+			lastproxy.endpoint_port = int(endpoint_port)
+		if url.query is not None:
+			query = parse_qs(url.query)
+
+			proxycounts = [0]
+			proxynums = {'0' : None}
+			for k in query:
+				if k.startswith('proxy'):
+					try:
+						int(k[5])
+						if k[5] not in proxynums:
+							proxynums[k[5]] = None
+							proxycounts.append(int(k[5]))
+					except Exception as e:
+						#print(e)
+						pass
+			#print(proxynums)
+			#print(proxycounts)
+			if len(proxycounts) != len(proxynums):
+				raise Exception('proxyies are not in sequential order! ERROR!')
+
+			proxycounts.sort()
+			firstiter = True
+			prevproxy = lastproxy
+			for i in proxycounts[::-1]:
+				pdata = UniProxyTarget()
+				if firstiter is True:
+					firstiter = False
+					pdata = lastproxy
+				else:
+					pdata.endpoint_ip = prevproxy.server_ip
+					pdata.endpoint_port = prevproxy.server_port
+					prevproxy = pdata
+				startstring = 'proxy%s' % i
+				if i == 0:
+					startstring = 'proxy'
+				for k in query:
+					if k.startswith(startstring):
+						startpos = 6
+						if i == 0:
+							startpos = 5
+												
+						if k[startpos:] in uniproxytarget_urlparams_param2var:
+							data = query[k][0]
+							for c in uniproxytarget_urlparams_param2var[k[startpos:]][1]:
+								#print(c)
+								data = c(data)
+
+							setattr(
+								pdata, 
+								uniproxytarget_urlparams_param2var[k[startpos:]][0], 
+								data
+							)
+				proxynums[str(i)] = pdata
+
+		#if len(proxynums) > 1:
+		#	for k in proxynums:
+		#		if proxynums[k].version in sockssslversions:
+		#			raise Exception('SSL in proxy chaining not supported! That would be a lot of work...')
+		#else:
+		#	if proxynums['0'].version in sockssslversions:
+		#		proxynums['0'].ssl_ctx = ssl.create_default_context()
+
+		
+		#for k in proxynums:
+		#	proxynums[k].sanity_check()
+		
+		targets = []
+		for i in proxycounts:
+			targets.append(proxynums[str(i)])
+
+		return targets
