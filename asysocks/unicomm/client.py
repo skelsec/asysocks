@@ -11,7 +11,7 @@ from asysocks.unicomm.protocol.socks5 import SOCKS5Method, SOCKS5Nego, SOCKS5Neg
 
 from asysocks.unicomm.common.target import UniTarget, UniProto
 from asysocks.unicomm.common.proxy import UniProxyProto, UniProxyTarget
-from asysocks.unicomm.common.packetizers.base import Packetizer
+from asysocks.unicomm.common.packetizers import Packetizer
 from asysocks.unicomm.common.packetizers.ssl import PacketizerSSL
 from asysocks.unicomm.common.connection import UniConnection
 from asysocks.unicomm import logger

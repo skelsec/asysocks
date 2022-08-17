@@ -1,6 +1,6 @@
 import ssl
 import asyncio
-from asysocks.unicomm.common.packetizers.base import Packetizer
+from asysocks.unicomm.common.packetizers import Packetizer
 from asysocks.unicomm.common.packetizers.ssl import PacketizerSSL
 
 class UniConnection:
