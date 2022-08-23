@@ -114,5 +114,78 @@ class UniTargetGen:
 		for tid, target in self.targets:
 			yield (tid, target)
 
+class UniTargetPortGen:
+	def __init__(self):
+		self.targets = []
+		self.ports = {}
 	
+	@staticmethod
+	def from_list(tl):
+		targetgen = UniTargetGen()
+		targetgen.add_list(tl)
+		return targetgen
 	
+	def add_port_list(self, portranges):
+		def calc_range(x):
+			if x.find('-') != -1:
+				start,end = x.split('-')
+				for i in range(int(start), int(end)):
+					self.ports[int(i)] = None
+			else:
+				self.ports[int(x)] = None
+
+		for prange in portranges:
+			if prange.find(',') != -1:
+				for port in prange.split(','):
+					calc_range(port)
+			else:
+				calc_range(prange)
+
+	
+	def add_list(self, targetlist):
+		for t in targetlist:
+			try:
+				self.add_ip(t)
+			except:
+				try:
+					self.add_file(t)
+				except:
+					self.add_hostname(t)
+
+	def add_ip(self, ip):
+		uids = []
+		try:
+			ipaddress.ip_address(ip)
+			uid = str(uuid.uuid4())
+			uids.append(uid)
+			self.targets.append((uid, ip))
+		except:
+			for t in ipaddress.ip_network(ip,strict=False):
+				uid = str(uuid.uuid4())
+				uids.append(uid)
+				self.targets.append((uid, str(t)))
+		return uids
+
+	def add_file(self, fname):
+		uids = []
+		with open(fname, 'r') as f:
+			for line in f:
+				line=line.strip()
+				try:
+					uids += self.add_ip(line)
+				except:
+					uids += self.add_hostname(line)
+		return uids
+	
+	def add_hostname(self, hosntame):
+		uid = str(uuid.uuid4())
+		self.targets.append((uid, str(hosntame)))
+		return [uid]
+	
+	def get_total(self):
+		return len(self.targets)*len(self.ports)
+
+	async def run(self):
+		for tid, target in self.targets:
+			for port in self.ports:
+				yield (tid, (target,port))

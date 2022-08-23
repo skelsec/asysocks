@@ -132,7 +132,7 @@ class UniTarget:
 		
 		proxies = None
 		if proxy_present is True:
-			proxies = UniProxyTarget.from_url_params(connection_url, endpoint_port=port)
+			proxies = UniProxyTarget.from_url(connection_url, endpoint_port=port)
 		
 		timeout = params['timeout'] if params['timeout'] is not None else 5
 		return UniTarget(

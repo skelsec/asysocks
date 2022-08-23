@@ -33,6 +33,20 @@ proxyshort_to_type = {
 	'WSNETWSS' : UniProxyProto.CLIENT_SSL_WSNETWS,
 }
 
+proxyshort_protocol_defport = {
+	UniProxyProto.CLIENT_SOCKS4 : 1080,
+	UniProxyProto.CLIENT_SSL_SOCKS4 : 1080,
+	UniProxyProto.CLIENT_SOCKS5_TCP: 1080,
+	UniProxyProto.CLIENT_SOCKS5_UDP: 1080,
+	UniProxyProto.CLIENT_SSL_SOCKS5_TCP: 1080,
+	UniProxyProto.CLIENT_HTTP : 8080,
+	UniProxyProto.CLIENT_SSL_HTTP :8443,
+	UniProxyProto.CLIENT_WSNET: 8700,
+	UniProxyProto.CLIENT_WSNETWS:8700,
+	UniProxyProto.CLIENT_SSL_WSNETWS:8765,
+}
+
+
 def urlparam_proto(x):
 	return proxyshort_to_type[x.upper()]
 
@@ -87,20 +101,11 @@ class UniProxyTarget:
 		return t
 
 	@staticmethod
-	def from_url_params(url_str, endpoint_port = None):
-		"""
-
-		"""
+	def from_url_params(query, hostname, endpoint_port = None):
 		lastproxy = UniProxyTarget()
-		url = urlparse(url_str)
-		lastproxy.endpoint_ip = url.hostname
-		if url.port:
-			lastproxy.endpoint_port = int(url.port)
-		else:
-			lastproxy.endpoint_port = int(endpoint_port)
-		if url.query is not None:
-			query = parse_qs(url.query)
-
+		lastproxy.endpoint_ip = hostname
+		lastproxy.endpoint_port = int(endpoint_port)
+		if query is not None:
 			proxycounts = [0]
 			proxynums = {'0' : None}
 			for k in query:
@@ -169,3 +174,74 @@ class UniProxyTarget:
 			targets.append(proxynums[str(i)])
 
 		return targets
+
+	@staticmethod
+	def from_url(url_str, endpoint_port = None):
+		"""
+
+		"""
+		url = urlparse(url_str)
+		endpoint_ip = url.hostname
+		if url.port:
+			endpoint_port = int(url.port)
+		else:
+			endpoint_port = int(endpoint_port)
+		query = None
+		if url.query is not None:
+			query = parse_qs(url.query)
+		return UniProxyTarget.from_url_params(query, endpoint_ip, endpoint_port)
+
+	@staticmethod
+	def from_url_full(url_str, endpoint_ip, endpoint_port):
+		"""socks5+password://TEST\\Administrator:Password!1@127.0.0.1"""
+		result = []
+		if isinstance(url_str, list):
+			for url in url_str[::-1]:
+				res = UniProxyTarget.from_url_full(url, endpoint_ip, endpoint_port)
+				result += res
+				endpoint_ip   = res[0].server_ip
+				endpoint_port = res[0].server_port
+			return result[::-1]
+		
+		url = urlparse(url_str)
+		proto, auth = url.scheme.upper().split('+')
+		protocol = proxyshort_to_type[proto]
+
+		query = None
+		if url.query is not None:
+			query = parse_qs(url.query)
+		
+		params = {}
+		for k in query:
+			if k in uniproxytarget_urlparams_param2var:
+				data = query[k][0]
+				for c in uniproxytarget_urlparams_param2var[k][1]:
+					data = c(data)
+					params[k] = data
+		
+
+		credential = None
+		if url.username is not None or url.password is not None:
+			credential = (url.username, url.password)
+
+		pt = UniProxyTarget()
+		pt.server_ip = url.hostname
+		pt.server_port = url.port if url.port is not None else proxyshort_protocol_defport[protocol]
+		pt.protocol= protocol
+		pt.endpoint_ip = endpoint_ip
+		pt.endpoint_port = endpoint_port
+		pt.credential = credential
+		pt.agentid = params.get('agentid')
+		pt.timeout = params.get('timeout', 10)
+
+		return [pt]
+		
+if __name__ == '__main__':
+	a = "socks5+password://TEST\\Administrator:Password!1@127.0.0.1"
+	b = "socks5+password://TEST\\Administrator:Password!1@127.0.0.1"
+	c = "socks5+password://TEST\\Administrator:Password!1@127.0.0.1"
+
+	res = UniProxyTarget.from_url_full([a,b,c], None, None)
+	for r in res:
+		
+		print(r)

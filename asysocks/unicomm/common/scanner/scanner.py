@@ -27,6 +27,8 @@ class UniScanner:
 		self.executors = executors
 		if isinstance(self.executors, list) is False:
 			self.executors = [self.executors]
+		if isinstance(self.target_generators, list) is False:
+			self.target_generators = [self.target_generators]
 
 	async def worker(self):
 		while True:
@@ -72,6 +74,8 @@ class UniScanner:
 					continue
 				except:
 					break
+		except Exception as e:
+			yield ScannerError('!SCANNER!', e)
 		finally:
 			await self.stop()
 			yield ScannerFinished(self.name)

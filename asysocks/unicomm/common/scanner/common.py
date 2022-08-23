@@ -1,6 +1,7 @@
 import enum
 import os
 import datetime
+import traceback
 
 class ScannerResultType(enum.Enum):
 	STARTED = 'STARTED'
@@ -8,6 +9,7 @@ class ScannerResultType(enum.Enum):
 	DATA = 'DATA'
 	PROGRESS = 'PROGRESS'
 	FINISHED = 'FINISHED'
+	INFO = 'INFO'
 
 class ScannerResult:
 	def __init__(self, type, resid, data = None):
@@ -15,7 +17,7 @@ class ScannerResult:
 		self.resid = str(resid)
 		self.data = data
 
-	def to_line(self):
+	def to_line(self, separator = '\t'):
 		raise NotImplementedError()
 
 class ScannerStarted(ScannerResult):
@@ -25,8 +27,8 @@ class ScannerStarted(ScannerResult):
 			ScannerResultType.STARTED,
 			scannername
 		)
-	def to_line(self):
-		return 'STARTED\t%s' % self.type
+	def to_line(self, separator = '\t'):
+		return separator.join(['STARTED', '%s' % self.type])
 
 class ScannerFinished(ScannerResult):
 	def __init__(self, scannername):
@@ -35,8 +37,8 @@ class ScannerFinished(ScannerResult):
 			ScannerResultType.FINISHED,
 			scannername
 		)
-	def to_line(self):
-		return 'FINISHED\t%s' % self.type
+	def to_line(self, separator = '\t'):
+		return separator.join(['FINISHED','%s' % self.type])
 
 class ScannerError(ScannerResult):
 	def __init__(self, resid, error):
@@ -46,8 +48,17 @@ class ScannerError(ScannerResult):
 			resid,
 			error
 		)
-	def to_line(self):
-		return 'ERROR\t%s\t%s' % (self.resid, str(self.data).replace('\r','').replace('\n', '').replace('\t', ' '))
+		self.traceback = None
+		if isinstance(error, Exception) is True:
+			self.traceback = error.__traceback__
+			self.data = repr(error)
+	
+	def to_line(self, separator = '\t'):
+		return separator.join(['ERROR', str(self.resid), str(self.data)]) #.replace('\r','').replace('\n', '').replace('\t', ' ')
+
+	def to_traceback(self):
+		if self.traceback is not None:
+			return ''.join(traceback.format_tb(self.traceback))
 
 class ScannerData(ScannerResult):
 	def __init__(self, resid, data):
@@ -82,8 +93,13 @@ class ScannerData(ScannerResult):
 		except:
 			return str(self.data)
 
-	def to_line(self):
-		return '%s\t%s' % (self.resid, self.__flatten_data())
+	def to_line(self, separator = '\t'):
+		res = ''
+		for line in self.__flatten_data().split('\n'):
+			line = line.strip()
+			res += separator.join([str(self.resid), line])#  + '\r\n'
+
+		return res
 
 class ScannerProgress(ScannerResult):
 	def __init__(self, scannername, total, current):
@@ -100,5 +116,22 @@ class ScannerProgress(ScannerResult):
 			return 'x'
 		return (self.current/self.total)*100
 
-	def to_line(self):
-		return 'PROGRESS\t%s\\%s (%s%%)' % (self.total, self.current, self.to_percent())
+	def to_line(self, separator = '\t'):
+		return separator.join(['PROGRESS', '%s\\%s (%s%%)' % (self.total, self.current, self.to_percent())])
+
+class ScannerInfo(ScannerResult):
+	def __init__(self, resid, info):
+		ScannerResult.__init__(
+			self,
+			ScannerResultType.INFO,
+			resid,
+			info
+		)
+	
+	def to_line(self, separator = '\t'):
+		res = ''
+		for line in str(self.data).split('\n'):
+			line = line.strip()
+			res += separator.join(['INFO', str(self.resid), line]) + '\r\n'
+
+		return res
