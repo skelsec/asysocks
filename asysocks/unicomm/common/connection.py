@@ -43,7 +43,8 @@ class UniConnection:
 
 	async def close(self):
 		self.closing = True
-		self.writer.close()
+		if self.writer is not None:
+			self.writer.close()
 
 	async def write(self, data):
 		async for packet in self.packetizer.data_out(data):
@@ -55,13 +56,16 @@ class UniConnection:
 			return packet
 
 	async def read(self):
-		data = None
-		while self.closing is False:
-			if data is not None:	
-				async for result in self.packetizer.data_in(data):
-					yield result
-				data = None
-			else:
-				data = await self.reader.read(self.packetizer.buffer_size)
-				if data == b'':
-					break
+		try:
+			data = None
+			while self.closing is False:
+				if data is not None:	
+					async for result in self.packetizer.data_in(data):
+						yield result
+					data = None
+				else:
+					data = await self.reader.read(self.packetizer.buffer_size)
+					if data == b'':
+						break
+		except Exception as e:
+			yield None

@@ -55,6 +55,14 @@ class UniTarget:
 		if ip is None and hostname is None:
 			raise Exception('Both IP and Hostname can\'t be none!')
 
+		self.__update_proxy()
+
+	def __update_proxy(self):
+		if len(self.proxies) == 0:
+			return
+		self.proxies[-1].endpoint_ip = self.get_hostname_or_ip()
+		self.proxies[-1].endpoint_port = self.port
+
 
 	def get_newtarget(self, ip, port, hostname = None):
 		return UniTarget(ip, port, self.protocol, self.timeout, ssl_ctx = None, hostname = hostname, dc_ip = self.dc_ip, domain = self.domain, proxies=copy.deepcopy(self.proxies))

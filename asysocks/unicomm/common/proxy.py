@@ -17,6 +17,7 @@ class UniProxyProto(enum.Enum):
 	CLIENT_HTTP = 7
 	CLIENT_SSL_HTTP = 8
 	CLIENT_WSNET = 9
+	CLIENT_WSNETTEST = 999
 	CLIENT_WSNETWS = 9
 	CLIENT_SSL_WSNETWS = 11
 
@@ -29,6 +30,7 @@ proxyshort_to_type = {
 	'HTTP' : UniProxyProto.CLIENT_HTTP,
 	'HTTPS' : UniProxyProto.CLIENT_SSL_HTTP,
 	'WSNET' : UniProxyProto.CLIENT_WSNET,
+	'WSNETTEST' : UniProxyProto.CLIENT_WSNETTEST,
 	'WSNETWS' : UniProxyProto.CLIENT_WSNETWS,
 	'WSNETWSS' : UniProxyProto.CLIENT_SSL_WSNETWS,
 }
@@ -42,6 +44,7 @@ proxyshort_protocol_defport = {
 	UniProxyProto.CLIENT_HTTP : 8080,
 	UniProxyProto.CLIENT_SSL_HTTP :8443,
 	UniProxyProto.CLIENT_WSNET: 8700,
+	UniProxyProto.CLIENT_WSNETTEST: 8700,
 	UniProxyProto.CLIENT_WSNETWS:8700,
 	UniProxyProto.CLIENT_SSL_WSNETWS:8765,
 }

@@ -252,6 +252,13 @@ class UniClient:
 							proxy.endpoint_port,
 							proxy.wsnet_reuse,
 						)
+					elif proxy.protocol == UniProxyProto.CLIENT_WSNETTEST:
+						from asysocks.network.wsnet import WSNETNetworkTest
+						remote_reader, remote_writer = await WSNETNetworkTest.open_connection(
+							proxy.endpoint_ip,
+							proxy.endpoint_port,
+							proxy.wsnet_reuse,
+						)
 					elif proxy.protocol in [UniProxyProto.CLIENT_WSNETWS, UniProxyProto.CLIENT_SSL_WSNETWS]:
 						from asysocks.network.wsnetws import WSNETNetworkWS
 						remote_reader, remote_writer = await WSNETNetworkWS.open_connection(
@@ -323,13 +330,13 @@ class UniClient:
 								raise err
 							continue
 
-						elif proxy.protocol in [UniProxyProto.CLIENT_WSNET, UniProxyProto.CLIENT_WSNETWS, UniProxyProto.CLIENT_SSL_WSNETWS]:
+						elif proxy.protocol in [UniProxyProto.CLIENT_WSNET, UniProxyProto.CLIENT_WSNETWS, UniProxyProto.CLIENT_SSL_WSNETWS, UniProxyProto.CLIENT_WSNETTEST]:
 							if i != 0:
 								raise Exception("WSNET only supported as the first proxy in chain!")
 							continue
 
 						else:
-							raise Exception('Unknown SOCKS version!')
+							raise Exception('Unknown SOCKS version! "%s"' % proxy.protocol)
 
 					else:
 						# no need to do more iterations because of HTTP at this point

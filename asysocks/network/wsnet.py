@@ -7,6 +7,26 @@ import asyncio
 # else you gonna have a bad time.
 # 
 
+class WSNETNetworkTest:
+	@staticmethod
+	async def open_connection(host, port, wsnet_reuse = False):
+		from asysocks.test.wsnettest import WSNetworkTCPTEST
+		out_queue = asyncio.Queue()
+		in_queue = asyncio.Queue()
+		closed_event = asyncio.Event()
+
+		client = WSNetworkTCPTEST(host, int(port), in_queue, out_queue, wsnet_reuse)
+		_, err = await client.run()
+		if err is not None:
+			raise err
+			
+		writer = WSNETWriter(out_queue, closed_event)
+		reader = WSNETReader(in_queue, closed_event)
+		await writer.run()
+		await reader.run()
+		
+		return reader, writer
+
 class WSNETNetwork:
 	@staticmethod
 	async def open_connection(host, port, wsnet_reuse = False):

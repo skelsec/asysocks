@@ -55,8 +55,9 @@ class PacketizerSSL(Packetizer):
 				#print('DST handshake ok %s' % ctr)
 				server_fin = self.tls_out_buff.read()
 				#print('DST server_fin %s ' %  server_fin)
-				writer.write(server_fin)
-				await writer.drain()
+				if server_fin != b'':
+					writer.write(server_fin)
+					await writer.drain()
 				break
 	
 	async def data_out(self, data:bytes):
