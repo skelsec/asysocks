@@ -1,6 +1,6 @@
 import ssl
 import asyncio
-from asysocks.unicomm.common.packetizers import Packetizer
+from asysocks.unicomm.common.packetizers import Packetizer, StreamPacketizer
 from asysocks.unicomm.common.packetizers.ssl import PacketizerSSL
 
 class UniConnection:
@@ -46,6 +46,9 @@ class UniConnection:
 		if self.writer is not None:
 			self.writer.close()
 
+	async def drain(self):
+		return
+		
 	async def write(self, data):
 		async for packet in self.packetizer.data_out(data):
 			self.writer.write(packet)
@@ -69,3 +72,12 @@ class UniConnection:
 						break
 		except Exception as e:
 			yield None
+	
+	async def stream(self):
+		if not isinstance(self.packetizer, StreamPacketizer):
+			raise Exception('This function onaly available when StreamPacketizer is used!')
+		while True:
+			data = await self.reader.read(self.packetizer.buffer_size)
+			await self.packetizer.data_in(data)
+			if data == b'':
+				break
