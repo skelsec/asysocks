@@ -48,7 +48,7 @@ class UniConnection:
 
 	async def drain(self):
 		return
-		
+
 	async def write(self, data):
 		async for packet in self.packetizer.data_out(data):
 			self.writer.write(packet)
@@ -62,14 +62,14 @@ class UniConnection:
 		try:
 			data = None
 			while self.closing is False:
-				if data is not None:	
-					async for result in self.packetizer.data_in(data):
-						yield result
-					data = None
-				else:
-					data = await self.reader.read(self.packetizer.buffer_size)
-					if data == b'':
+				async for result in self.packetizer.data_in(data):
+					if result is None:
 						break
+					yield result
+				
+				data = await self.reader.read(self.packetizer.buffer_size)
+				if data == b'':
+					break
 		except Exception as e:
 			yield None
 	
