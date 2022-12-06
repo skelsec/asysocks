@@ -6,7 +6,7 @@ import ipaddress
 from typing import Callable, Dict, List
 from urllib.parse import urlparse, parse_qs
 
-from asysocks.unicomm.common.proxy import UniProxyTarget
+from asysocks.unicomm.common.proxy import UniProxyProto, UniProxyTarget
 from asysocks.unicomm.utils.paramprocessor import str_one, int_one, bool_one
 
 class UniProto(enum.Enum):
@@ -15,6 +15,8 @@ class UniProto(enum.Enum):
 	CLIENT_UDP = 3
 	CLIENT_DTLS = 4
 	CLIENT_QUIC = 5
+	SERVER_TCP = 6
+	SERVER_SSL_TCP = 7
 
 unitarget_url_params = {
 	'dc' : str_one,
@@ -33,7 +35,7 @@ class UniTarget:
 		self.dc_ip = dc_ip
 		self.domain = domain
 		self.dns = dns
-		self.proxies = proxies
+		self.proxies:List[UniProxyTarget] = proxies
 		if proxies is None:
 			self.proxies = []
 
@@ -155,7 +157,15 @@ class UniTarget:
 			dns=params['dns']
 		), extra
 
-
+	def get_preproxy(self):
+		if len(self.proxies) > 1:
+			lproxy = self.proxies[-1]
+			lproto=UniProto.CLIENT_TCP
+			return UniTarget(lproxy.server_ip, lproxy.server_port, protocol = lproto, proxies=self.proxies[:-1])
+		
+		return self
+		
+			
 	
 	def __str__(self):
 		t = '==== UniTarget ====\r\n'

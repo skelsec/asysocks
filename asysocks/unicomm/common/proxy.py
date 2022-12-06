@@ -3,6 +3,7 @@ import ssl
 import enum
 from typing import List
 from urllib.parse import urlparse, parse_qs
+import copy
 
 def stru(x):
 	return str(x).upper()
@@ -17,9 +18,15 @@ class UniProxyProto(enum.Enum):
 	CLIENT_HTTP = 7
 	CLIENT_SSL_HTTP = 8
 	CLIENT_WSNET = 9
+	CLIENT_CUSTOM = 998
 	CLIENT_WSNETTEST = 999
-	CLIENT_WSNETWS = 9
+	CLIENT_WSNETWS = 10
 	CLIENT_SSL_WSNETWS = 11
+	SERVER_WSNET = 12
+	SERVER_SOCKS5_TCP = 13
+	SERVER_SOCKS5_UDP = 14
+	SERVER_SSL_SOCKS5_TCP = 15
+	SERVER_SSL_SOCKS5_UDP = 16
 
 proxyshort_to_type = {
 	'SOCKS4' : UniProxyProto.CLIENT_SOCKS4,
@@ -33,6 +40,7 @@ proxyshort_to_type = {
 	'WSNETTEST' : UniProxyProto.CLIENT_WSNETTEST,
 	'WSNETWS' : UniProxyProto.CLIENT_WSNETWS,
 	'WSNETWSS' : UniProxyProto.CLIENT_SSL_WSNETWS,
+	'CUSTOM': UniProxyProto.CLIENT_CUSTOM,
 }
 
 proxyshort_protocol_defport = {
@@ -82,6 +90,7 @@ class UniProxyTarget:
 		self.endpoint_port:int = None
 		self.wsnet_reuse:bool = False
 		self.userid = os.urandom(4).hex().encode('ascii')
+		self.customproxyfactory = None
 
 		self.only_open = False #These params used for security testing only! 
 		self.only_auth = False #These params used for security testing only!
@@ -102,6 +111,25 @@ class UniProxyTarget:
 			t += '%s: %s\r\n' % (k, self.__dict__[k])
 			
 		return t
+
+	def __deepcopy__(self, memo=None):
+		proxy = UniProxyTarget()
+		proxy.server_ip = copy.deepcopy(self.server_ip)
+		proxy.server_port = copy.deepcopy(self.server_port)
+		proxy.agentid = copy.deepcopy(self.agentid)
+		proxy.protocol = copy.deepcopy(self.protocol)
+		proxy.timeout = copy.deepcopy(self.timeout)
+		proxy.ssl_ctx = copy.deepcopy(self.ssl_ctx) #this will definitely fail!!!
+		proxy.credential = copy.deepcopy(self.credential)
+		proxy.endpoint_ip = copy.deepcopy(self.endpoint_ip)
+		proxy.endpoint_port = copy.deepcopy(self.endpoint_port)
+		proxy.wsnet_reuse = copy.deepcopy(self.wsnet_reuse)
+		proxy.userid = copy.deepcopy(self.userid)
+		self.only_open = copy.deepcopy(self.only_open) 
+		self.only_auth = copy.deepcopy(self.only_auth)
+		self.only_bind = copy.deepcopy(self.only_bind)
+		proxy.customproxyfactory = self.customproxyfactory
+		return proxy
 
 	@staticmethod
 	def from_url_params(query, hostname, endpoint_port = None):

@@ -272,6 +272,19 @@ class UniClient:
 						)
 						if remote_reader is None:
 							raise remote_writer
+					elif proxy.protocol == UniProxyProto.CLIENT_CUSTOM:
+						proxyconnection, err = proxy.customproxyfactory()
+						if err is not None:
+							raise err
+
+						remote_reader, remote_writer, err = await proxyconnection.connect(
+							proxy.endpoint_ip,
+							proxy.endpoint_port,
+							proxy.protocol,
+						)
+						if err is not None:
+							raise err
+						
 					else:
 						remote_reader, remote_writer = await asyncio.wait_for(
 							asyncio.open_connection(
@@ -330,7 +343,7 @@ class UniClient:
 								raise err
 							continue
 
-						elif proxy.protocol in [UniProxyProto.CLIENT_WSNET, UniProxyProto.CLIENT_WSNETWS, UniProxyProto.CLIENT_SSL_WSNETWS, UniProxyProto.CLIENT_WSNETTEST]:
+						elif proxy.protocol in [UniProxyProto.CLIENT_WSNET, UniProxyProto.CLIENT_WSNETWS, UniProxyProto.CLIENT_SSL_WSNETWS, UniProxyProto.CLIENT_WSNETTEST, UniProxyProto.CLIENT_CUSTOM]:
 							if i != 0:
 								raise Exception("WSNET only supported as the first proxy in chain!")
 							continue
@@ -350,7 +363,7 @@ class UniClient:
 			return remote_reader, remote_writer
 		
 		except Exception as e:
-			logger.exception('[handle_client]')
+			logger.debug('[handle_client] Exception: %s' % e)
 			if remote_writer is not None:
 				remote_writer.close()
 			raise

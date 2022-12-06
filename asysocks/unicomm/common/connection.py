@@ -10,6 +10,7 @@ class UniConnection:
 		self.packetizer = packetizer
 		self.packetizer_task = None
 		self.closing = False
+		self.closed_evt = asyncio.Event()
 
 	async def __aenter__(self):
 		return self

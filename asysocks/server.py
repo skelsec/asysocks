@@ -263,13 +263,13 @@ class SOCKSServer:
 				try:
 					if req.ATYP == SOCKS5AddressType.IP_V4:
 						serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-						serversocket.bind((str(req.DST_ADDR), 0))
+						serversocket.bind((str(req.DST_ADDR), req.DST_PORT))
 					elif req.ATYP == SOCKS5AddressType.IP_V6:
 						serversocket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-						serversocket.bind((str(req.DST_ADDR), 0))
+						serversocket.bind((str(req.DST_ADDR), req.DST_PORT))
 					elif req.ATYP == SOCKS5AddressType.DOMAINNAME: #not sure abt this...
 						serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-						serversocket.bind((str(req.DST_ADDR), 0))
+						serversocket.bind((str(req.DST_ADDR), req.DST_PORT))
 
 					serversocket.listen(1)
 					serversocket_ip, serversocket_port = serversocket.getsockname()
@@ -280,7 +280,7 @@ class SOCKSServer:
 					await asyncio.start_server(__handle_remote, sock=serversocket, backlog = 1) #TODO: this will constantly server bc there is no way to terminate this FIX!!!
 				except Exception as e:
 					srvlogger.debug('[SOCKS5] Error! Could not bind to: %s:%s Reason: %s' % (str(req.DST_ADDR), req.DST_PORT, e))
-					reply = SOCKS5Reply.construct(SOCKS5ReplyType.FAILURE , req.DST_ADDR, req.port)
+					reply = SOCKS5Reply.construct(SOCKS5ReplyType.FAILURE , req.DST_ADDR, req.DST_PORT)
 					writer.write(reply.to_bytes())
 					await writer.drain()
 					return			
