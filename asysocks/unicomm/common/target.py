@@ -69,15 +69,18 @@ class UniTarget:
 	@staticmethod
 	def get_help(helptype:str = 'url'):
 		if helptype == 'url':
-			return 'Connection related parameters:\n' + \
+			return 'Connection related parameters -query params-:\n' + \
 				'\ttimeout - int - connection timeout in seconds\n' + \
 				'\tdc - str - domain controller IP address (KERBEROS)\n' + \
 				'\tserverip - str - server IP address (if different from what your DNS resolver would say)\n' + \
 				'\tdns - str - DNS server IP address (not used)\n' + \
-				'\tssl_verify - bool - SSL/TLS verify server certificate\n' + \
-				'\tssl_cert - str - SSL/TLS certificate path\n' + \
-				'\tssl_key - str - SSL/TLS key path\n' + \
-				'\tssl_key_password - str - SSL/TLS key password\n' +\
+				'\tsslverify - bool - SSL/TLS verify server certificate\n' + \
+				'\tsslcert - str - SSL/TLS certificate path\n' + \
+				'\tsslkey - str - SSL/TLS key path\n' + \
+				'\tsslpassword - str - SSL/TLS key password\n' +\
+				'\t=== PROXY PARAMETERS ===\n' + \
+				'\tEach proxy needs at least "proxytype", "proxyhost" and "proxyport" defined!\n' +\
+				'\tProxy parameters can be repeated to add multiple proxies, just change the prefix to "proxy1" "proxy2" ...\n'+\
 				'\tproxytype - str - Available PROXY protocols: http, socks4, socks5\n\n' + \
 				'\tproxyusername - str - proxy username\n' + \
 				'\tproxypassword - str - proxy password\n' + \
@@ -85,10 +88,11 @@ class UniTarget:
 				'\tproxyhost - str - proxy server IP address\n' + \
 				'\tproxyport - int - proxy port\n' + \
 				'\tproxyssl - bool - proxy SSL/TLS\n' + \
-				'\tproxyssl_verify - bool - proxy SSL/TLS verification\n' + \
-				'\tproxyssl_cert - str - proxy SSL/TLS certificate path\n' + \
-				'\tproxyssl_key - str - proxy SSL/TLS key path\n' + \
-				'\tproxyssl_key_password - str - proxy SSL/TLS key password\n'
+				'\tproxysslverify - bool - proxy SSL/TLS verification\n' + \
+				'\tproxysslcert - str - proxy SSL/TLS certificate path\n' + \
+				'\tproxysslkey - str - proxy SSL/TLS key path\n' + \
+				'\tproxysslkey_password - str - proxy SSL/TLS key password\n'
+				
 
 
 	def get_newtarget(self, ip, port, hostname = None):
