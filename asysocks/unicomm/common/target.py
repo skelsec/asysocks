@@ -6,6 +6,7 @@ import ipaddress
 from typing import Callable, Dict, List
 from urllib.parse import urlparse, parse_qs
 
+from asysocks.unicomm.common.unissl import UniSSL
 from asysocks.unicomm.common.proxy import UniProxyProto, UniProxyTarget
 from asysocks.unicomm.utils.paramprocessor import str_one, int_one, bool_one
 
@@ -26,7 +27,7 @@ unitarget_url_params = {
 }
 
 class UniTarget:
-	def __init__(self, ip:str, port:int, protocol:UniProto, timeout:int=5, ssl_ctx:ssl.SSLContext=None, hostname:str = None, dc_ip:str = None, domain:str = None, proxies:List[UniProxyTarget] = None, dns:str = None):
+	def __init__(self, ip:str, port:int, protocol:UniProto, timeout:int=5, ssl_ctx:UniSSL=None, hostname:str = None, dc_ip:str = None, domain:str = None, proxies:List[UniProxyTarget] = None, dns:str = None):
 		self.hostname = hostname
 		self.port = port
 		self.protocol = protocol
@@ -67,15 +68,12 @@ class UniTarget:
 
 
 	def get_newtarget(self, ip, port, hostname = None):
-		return UniTarget(ip, port, self.protocol, self.timeout, ssl_ctx = None, hostname = hostname, dc_ip = self.dc_ip, domain = self.domain, proxies=copy.deepcopy(self.proxies))
+		return UniTarget(ip, port, self.protocol, self.timeout, ssl_ctx = self.ssl_ctx, hostname = hostname, dc_ip = self.dc_ip, domain = self.domain, proxies=copy.deepcopy(self.proxies))
 
 	def get_ssl_context(self):
 		if self.ssl_ctx is not None:
-			return self.ssl_ctx
-		ssl_ctx = ssl.create_default_context()
-		ssl_ctx.check_hostname = False
-		ssl_ctx.verify_mode = ssl.CERT_NONE
-		return ssl_ctx
+			return self.ssl_ctx.get_ssl_context()
+		return UniSSL.get_noverify_context()
 
 	def get_hostname(self):
 		return self.hostname
@@ -145,16 +143,18 @@ class UniTarget:
 			proxies = UniProxyTarget.from_url(connection_url, endpoint_port=port)
 		
 		timeout = params['timeout'] if params['timeout'] is not None else 5
+		sslctx = UniSSL.from_url(connection_url)
 		return UniTarget(
 			ip,
 			port,
 			protocol,
 			timeout = timeout,
 			hostname = hostname,
+			ssl_ctx=sslctx,
 			dc_ip = params['dc'],
 			domain=domain,
 			proxies=proxies,
-			dns=params['dns']
+			dns=params['dns'],
 		), extra
 
 	def get_preproxy(self):
