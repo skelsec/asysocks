@@ -1,7 +1,8 @@
 # this is experimental!
 import asyncio
 import copy
-from weakref import proxy
+import ssl
+import platform
 from asysocks.unicomm.protocol.socks5 import SOCKS5Method, SOCKS5Nego, SOCKS5NegoReply, SOCKS5PlainAuth, \
 	SOCKS5AuthFailed, SOCKS5PlainAuthReply, SOCKS5ReplyType, SOCKS5Request, SOCKS5Reply, \
 	SOCKS5ServerErrorReply
@@ -11,9 +12,12 @@ from asysocks.unicomm.common.target import UniTarget, UniProto
 from asysocks.unicomm.common.proxy import UniProxyProto, UniProxyTarget
 from asysocks.unicomm.common.packetizers import Packetizer, StreamPacketizer
 from asysocks.unicomm.common.packetizers.ssl import PacketizerSSL
-from asysocks.unicomm.common.connection import UniConnection
+from asysocks.unicomm.common.connection import UniConnection, UniUDPConnection
 from asysocks.unicomm import logger
 from asysocks.unicomm.client import UniClient
+from asysocks.unicomm.protocol.server.udp import UDPProtocol
+import ipaddress
+
 
 class ProxyChainError(Exception):
 	def __init__(self, innerexception, message="Something failed setting up the proxy chain! See innerexception for more details"):
@@ -23,8 +27,9 @@ class ProxyChainError(Exception):
 
 
 class UniServer:
-	def __init__(self, target:UniTarget, packetizer:Packetizer):
+	def __init__(self, target:UniTarget, packetizer:Packetizer, bindtype:int = None):
 		self.target = target
+		self.bindtype = bindtype
 		self.packetizer = packetizer
 		self.bind_progress_evt = asyncio.Event()
 		self.connection_queue = asyncio.Queue()
@@ -155,9 +160,9 @@ class UniServer:
 							await self.connection_queue.put(connection)
 							return connection, None
 						elif self.target.protocol == UniProto.SERVER_SSL_TCP:
-							ssl_ctx = self.target.get_ssl_context()
+							ssl_ctx = self.target.get_ssl_context(ssl.PROTOCOL_TLS_SERVER)
 							packetizer = PacketizerSSL(ssl_ctx, packetizer)
-							await packetizer.do_handshake(connection.packetizer, connection)
+							await packetizer.do_handshake(connection.packetizer, connection, server_side=True)
 							connection = UniConnection(connection.packetizer, connection, packetizer)
 							await self.connection_queue.put(connection)
 							return connection, None
@@ -186,13 +191,98 @@ class UniServer:
 		await connection.closed_evt.wait()
 
 	async def __handle_connection_ssl(self, reader, writer):
-		packetizer = copy.deepcopy(self.packetizer)
-		ssl_ctx = self.target.get_ssl_context()
-		packetizer = PacketizerSSL(ssl_ctx, packetizer)
-		await packetizer.do_handshake(reader, writer)
-		connection = UniConnection(reader, writer, packetizer)
-		await self.connection_queue.put(connection)
-		await connection.closed_evt.wait()
+		ssl_ctx = None
+		try:
+			packetizer = copy.deepcopy(self.packetizer)
+			ssl_ctx = self.target.get_ssl_context(ssl.PROTOCOL_TLS_SERVER)
+			packetizer = PacketizerSSL(ssl_ctx, packetizer)
+			await packetizer.do_handshake(reader, writer, server_side=True)
+			connection = UniConnection(reader, writer, packetizer)
+			await self.connection_queue.put(connection)
+			await connection.closed_evt.wait()
+		finally:
+			if ssl_ctx is not None:
+				del ssl_ctx
+
+
+	async def start_llmnr_server(self):
+		try:
+			in_queue = asyncio.Queue()
+			if platform.system() == 'Emscripten':
+				from wsnet.pyodide.udpserver import WSNetworkUDPServer
+				protofactory = lambda: UDPProtocol(in_queue)
+				wsnetserver = WSNetworkUDPServer(protofactory, '0.0.0.0', 5355, bindtype = 2, reuse_ws = False)
+				servertransport, serverproto, err = await wsnetserver.run()
+				if err is not None:
+					raise err
+				return servertransport, serverproto, None
+			
+			import socket
+			import struct
+			sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+			sock.bind(('', 5355))
+			group = ipaddress.ip_address('224.0.0.252').packed
+			mreq = struct.pack('4sL', group, socket.INADDR_ANY)
+			sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
+			sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+			sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+			sock.setblocking(False)
+			protofactory = lambda: UDPProtocol(in_queue)
+			servertransport, serverproto = await asyncio.get_event_loop().create_datagram_endpoint(protofactory, sock=sock)
+			return servertransport, serverproto, None
+		except Exception as e:
+			return None, None, e
+		
+	async def start_mdns_server(self):
+		try:
+			in_queue = asyncio.Queue()
+			if platform.system() == 'Emscripten':
+				from wsnet.pyodide.udpserver import WSNetworkUDPServer
+				protofactory = lambda: UDPProtocol(in_queue)
+				wsnetserver = WSNetworkUDPServer(protofactory, '0.0.0.0', 5353, bindtype = 4, reuse_ws = False)
+				servertransport, serverproto, err = await wsnetserver.run()
+				if err is not None:
+					raise err
+				return servertransport, serverproto, None
+			import socket
+			import struct
+			sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+			sock.bind(('224.0.0.251', 5353))
+			group = ipaddress.ip_address('224.0.0.251').packed
+			mreq = struct.pack("=4sl", group, socket.INADDR_ANY)
+			sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
+			sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+			sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+			sock.setblocking(False)
+			protofactory = lambda: UDPProtocol(in_queue)
+			servertransport, serverproto = await asyncio.get_event_loop().create_datagram_endpoint(protofactory, sock=sock)
+			return servertransport, serverproto, None
+		except Exception as e:
+			return None, None, e
+		
+	async def start_nbtns_server(self):
+		try:
+			in_queue = asyncio.Queue()
+			if platform.system() == 'Emscripten':
+				from wsnet.pyodide.udpserver import WSNetworkUDPServer
+				protofactory = lambda: UDPProtocol(in_queue)
+				wsnetserver = WSNetworkUDPServer(protofactory, '0.0.0.0', 137, bindtype = 3, reuse_ws = False)
+				servertransport, serverproto, err = await wsnetserver.run()
+				if err is not None:
+					raise err
+				return servertransport, serverproto, None
+			import socket
+			sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+			sock.bind(('0.0.0.0', 137))
+			sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+			sock.setblocking(False)
+			protofactory = lambda: UDPProtocol(in_queue)
+			servertransport, serverproto = await asyncio.get_event_loop().create_datagram_endpoint(protofactory, sock=sock)
+			return servertransport, serverproto, None
+		except Exception as e:
+			return None, None, e
+		
+
 
 	async def serve(self):
 		if len(self.target.proxies) > 0:
@@ -204,16 +294,42 @@ class UniServer:
 				yield connection
 			
 		else:
-			if self.target.protocol == UniProto.SERVER_TCP:
-				server = await asyncio.start_server(self.__handle_connection, self.target.get_ip_or_hostname(), self.target.port)
-			elif self.target.protocol == UniProto.SERVER_SSL_TCP:
-				server = await asyncio.start_server(self.__handle_connection_ssl, self.target.get_ip_or_hostname(), self.target.port)
+			if self.target.protocol in [UniProto.SERVER_TCP, UniProto.SERVER_SSL_TCP]:
+				if self.target.protocol == UniProto.SERVER_TCP:
+					server = await asyncio.start_server(self.__handle_connection, self.target.get_ip_or_hostname(), self.target.port)
+				elif self.target.protocol == UniProto.SERVER_SSL_TCP:
+					server = await asyncio.start_server(self.__handle_connection_ssl, self.target.get_ip_or_hostname(), self.target.port)
+				while server.is_serving():
+					connection = await self.connection_queue.get()
+					yield connection
+
+			elif self.target.protocol == UniProto.SERVER_UDP:
+				if self.bindtype == 2:
+					transport, protocol, err = await self.start_llmnr_server()
+					if err is not None:
+						raise err
+				
+				elif self.bindtype == 3:
+					transport, protocol, err = await self.start_nbtns_server()
+					if err is not None:
+						raise err
+
+				elif self.bindtype == 4:
+					transport, protocol, err = await self.start_mdns_server()
+					if err is not None:
+						raise err
+
+				else:
+					raise Exception('Unsupported bindtype %s' % self.bindtype)
+
+				while True:
+					socket, data, addr = await protocol.in_queue.get()
+					yield UniUDPConnection(socket, data, addr)
+
 			else:
 				raise Exception('Unknown protocol "%s"' % self.target.protocol)
 
-			while server.is_serving():
-				connection = await self.connection_queue.get()
-				yield connection
+			
 
 async def amain():
 	import logging

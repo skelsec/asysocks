@@ -14,6 +14,7 @@ unissl_url_param2var = {
 }
 
 class UniSSL:
+	"""This class was necessary to be able to create duplicates of ssl contexts, which is not possible with the ssl.SSLContext class."""
 	def __init__(self, certfile:str = None, keyfile:str = None, cacert:str = None, password:str = None, verify:bool = False):
 		self.protocol = ssl.PROTOCOL_TLS
 		self.cacert:str = cacert
@@ -110,17 +111,21 @@ class UniSSL:
 					f.write(ca.public_bytes(Encoding.PEM))
 
 	@staticmethod
-	def get_noverify_context(protocol = ssl.PROTOCOL_TLS_CLIENT):
-		ssl_ctx = ssl.SSLContext(protocol)
-		ssl_ctx.check_hostname = False
-		ssl_ctx.verify_mode = ssl.CERT_NONE
-		return ssl_ctx
+	def get_noverify_context(is_server=False, hostname = 'localhost'):
+		"""Returns a generic SSL context that does not verify the certificate."""
+		if is_server is True:
+			from asysocks.unicomm.utils.genselfsigned import generate_selfsigned_cert
+			server_certfile, server_keyfile = generate_selfsigned_cert(hostname)
+			return UniSSL(server_certfile, server_keyfile, None, verify=False)
+		
+		return UniSSL(verify=False)			
 	
 	def get_ssl_context(self, protocol = ssl.PROTOCOL_TLS_CLIENT):
 		try:
 			self.__startup()
 			ssl_ctx = ssl.SSLContext(protocol)
-			ssl_ctx.load_cert_chain(certfile=self.__certfilename, keyfile=self.__keyfilename, password=self.password)
+			if self.__certfilename is not None:
+				ssl_ctx.load_cert_chain(certfile=self.__certfilename, keyfile=self.__keyfilename, password=self.password)
 			
 			if self.verify is False:
 				ssl_ctx.check_hostname = False
