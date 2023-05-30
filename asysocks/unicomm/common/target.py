@@ -18,6 +18,7 @@ class UniProto(enum.Enum):
 	CLIENT_QUIC = 5
 	SERVER_TCP = 6
 	SERVER_SSL_TCP = 7
+	SERVER_UDP = 8
 
 unitarget_url_params = {
 	'dc' : str_one,
@@ -98,10 +99,13 @@ class UniTarget:
 	def get_newtarget(self, ip, port, hostname = None):
 		return UniTarget(ip, port, self.protocol, self.timeout, ssl_ctx = self.ssl_ctx, hostname = hostname, dc_ip = self.dc_ip, domain = self.domain, proxies=copy.deepcopy(self.proxies))
 
-	def get_ssl_context(self):
-		if self.ssl_ctx is not None:
-			return self.ssl_ctx.get_ssl_context()
-		return UniSSL.get_noverify_context()
+	def get_ssl_context(self, protocol = None):
+		if self.ssl_ctx is None:
+			is_server = True if self.protocol in [UniProto.SERVER_TCP, UniProto.SERVER_SSL_TCP, UniProto.SERVER_UDP] else False
+			self.ssl_ctx = UniSSL.get_noverify_context(is_server)
+		
+		return self.ssl_ctx.get_ssl_context(protocol)
+		
 
 	def get_hostname(self):
 		return self.hostname

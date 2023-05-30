@@ -31,7 +31,7 @@ class UniScanner:
 			self.target_generators = [self.target_generators]
 
 	async def worker(self):
-		while True:
+		while not asyncio.current_task().cancelled():
 			x = await self.__targetgen.__anext__()
 			if x is None:
 				return
@@ -135,6 +135,7 @@ class UniScanner:
 		except Exception as e:
 			print('SCANNER CRITICAL ERROR %s' % str(e))
 		finally:
+			await self.stop()
 			for k in fhandles:
 				try:
 					fhandles[k].close()

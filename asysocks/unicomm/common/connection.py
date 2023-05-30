@@ -82,3 +82,10 @@ class UniConnection:
 			await self.packetizer.data_in(data)
 			if data == b'':
 				break
+
+
+class UniUDPConnection:
+	def __init__(self, socket, data, addr):
+		self.socket = socket
+		self.data = data
+		self.addr = addr
