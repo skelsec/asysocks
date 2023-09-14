@@ -7,14 +7,8 @@ import glob
 import tempfile
 import logging
 import hashlib
+import ssl
 
-import platform
-try:
-	import ssl
-except:
-	if platform.system() == 'Emscripten':
-		#pyodide doesnt support SSL for now.
-		pass
 
 
 from cryptography import x509

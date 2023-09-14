@@ -378,8 +378,9 @@ class SOCKSClient:
 					if self.proxies[0].version == SocksServerVersion.WSNET:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(
-							self.proxies[0].endpoint_ip, 
-							self.proxies[0].endpoint_port
+							self.proxies[0].endpoint_ip,
+							self.proxies[0].endpoint_port,
+							self.proxies[0].wsnet_reuse,
 						)
 					elif self.proxies[0].version in [SocksServerVersion.WSNETWS, SocksServerVersion.WSNETWSS]:
 						from asysocks.network.wsnetws import WSNETNetworkWS
@@ -529,7 +530,8 @@ class SOCKSClient:
 						from asysocks.network.wsnet import WSNETNetwork
 						remote_reader, remote_writer = await WSNETNetwork.open_connection(
 							self.proxies[0].endpoint_ip, 
-							self.proxies[0].endpoint_port
+							self.proxies[0].endpoint_port,
+							self.proxies[0].wsnet_reuse,
 						)
 					elif self.proxies[0].version in [SocksServerVersion.WSNETWS, SocksServerVersion.WSNETWSS]:
 						from asysocks.network.wsnetws import WSNETNetworkWS
@@ -564,7 +566,7 @@ class SOCKSClient:
 							try:
 								x = await asyncio.wait_for(self.run_socks4(proxy, remote_reader, remote_writer), timeout=self.proxies[-1].timeout)
 							except asyncio.TimeoutError:
-								raise Exception('Proxy Connection establishment timeout')
+								raise Exception('SOCKS4 Connection establishment timeout')
 							_, err = x
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
@@ -576,7 +578,7 @@ class SOCKSClient:
 							try:
 								x = await asyncio.wait_for(self.run_socks4a(proxy, remote_reader, remote_writer), timeout=self.proxies[-1].timeout)
 							except asyncio.TimeoutError:
-								raise Exception('Proxy Connection establishment timeout')
+								raise Exception('SOCKS4A Connection establishment timeout')
 							_, err = x
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:
@@ -600,7 +602,7 @@ class SOCKSClient:
 							try:
 								x = await asyncio.wait_for(self.run_http(proxy, remote_reader, remote_writer, http_auth_ctx = self.http_auth_ctx), timeout=self.proxies[-1].timeout)
 							except asyncio.TimeoutError:
-								raise Exception('SOCKS5 Connection establishment timeout')
+								raise Exception('HTTP Connection establishment timeout')
 							_, self.http_auth_ctx, err = x
 							if err is not None:
 								if len(self.proxies) > 1 and i != len(self.proxies)-1:

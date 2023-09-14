@@ -1,14 +1,5 @@
 import asyncio
-
-import platform
-try:
-	import ssl
-except:
-	if platform.system() == 'Emscripten':
-		#pyodide doesnt support SSL for now.
-		pass
-
-
+import ssl
 import logging
 
 srvlogger = logging.getLogger('asysocks.traffic.ssl')
