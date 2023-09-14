@@ -9,6 +9,7 @@ class PacketizerSSL(Packetizer):
 		self.tls_in_buff:ssl.MemoryBIO = None
 		self.tls_out_buff:ssl.MemoryBIO = None
 		self.tls_obj:ssl.SSLObject = None
+		self.__plaintext_buffer = []
 
 	def flush_buffer(self):
 		return self.packetizer.flush_buffer()
@@ -61,7 +62,6 @@ class PacketizerSSL(Packetizer):
 				break
 	
 	async def data_out(self, data:bytes):
-		# TODO: ovbiously this is not sufficient for a reliable TLS connection, pls add necessary logic
 		outdata = b''
 		async for packetraw in self.packetizer.data_out(data):
 			outdata += packetraw
@@ -73,15 +73,25 @@ class PacketizerSSL(Packetizer):
 				continue
 			break
 
-	async def data_in(self, encdata:bytes):
-		# TODO: ovbiously this is not sufficient for a reliable TLS connection, pls add necessary logic
+	async def data_in(self, encdata:bytes):		
+		while self.__plaintext_buffer:
+			yield self.__plaintext_buffer.pop(0)
+			
 		if encdata is None:
-			yield encdata
+			yield None
+		
 		self.tls_in_buff.write(encdata)
+		data = b''
+		was_data = False
 		while True:
 			try:
-				data = self.tls_obj.read()
+				data += self.tls_obj.read()
+				was_data = True
 			except ssl.SSLWantReadError:
 				break
+		if was_data is True:
 			async for packet in self.packetizer.data_in(data):
-				yield packet
+				self.__plaintext_buffer.append(packet)
+			
+			while self.__plaintext_buffer:
+				yield self.__plaintext_buffer.pop(0)

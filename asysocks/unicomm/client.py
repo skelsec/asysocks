@@ -259,6 +259,16 @@ class UniClient:
 							proxy.endpoint_port,
 							proxy.wsnet_reuse,
 						)
+					elif proxy.protocol in [UniProxyProto.CLIENT_WSNETDIRECT, UniProxyProto.CLIENT_SSL_WSNETDIRECT]:
+						from asysocks.network.wsnetdirect import WSNetworkDirect
+						remote_reader, remote_writer = await WSNetworkDirect.open_connection(
+							proxy.server_ip,
+							proxy.server_port,
+							proxy.protocol,
+							proxy.endpoint_ip,
+							proxy.endpoint_port,
+							proxy.wsnet_reuse,
+						)
 					elif proxy.protocol in [UniProxyProto.CLIENT_WSNETWS, UniProxyProto.CLIENT_SSL_WSNETWS]:
 						from asysocks.network.wsnetws import WSNETNetworkWS
 						remote_reader, remote_writer = await WSNETNetworkWS.open_connection(
@@ -343,7 +353,7 @@ class UniClient:
 								raise err
 							continue
 
-						elif proxy.protocol in [UniProxyProto.CLIENT_WSNET, UniProxyProto.CLIENT_WSNETWS, UniProxyProto.CLIENT_SSL_WSNETWS, UniProxyProto.CLIENT_WSNETTEST, UniProxyProto.CLIENT_CUSTOM]:
+						elif proxy.protocol in [UniProxyProto.CLIENT_WSNET, UniProxyProto.CLIENT_WSNETWS, UniProxyProto.CLIENT_SSL_WSNETWS, UniProxyProto.CLIENT_WSNETTEST, UniProxyProto.CLIENT_CUSTOM, UniProxyProto.CLIENT_WSNETDIRECT, UniProxyProto.CLIENT_SSL_WSNETDIRECT]:
 							if i != 0:
 								raise Exception("WSNET only supported as the first proxy in chain!")
 							continue
