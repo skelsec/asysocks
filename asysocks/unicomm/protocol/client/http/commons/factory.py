@@ -10,13 +10,15 @@ class HTTPConnectionFactory:
 		self.target = target
 	
 	@staticmethod
-	def from_url(connection_url):
+	def from_url(connection_url, proxies = None):
 		target = HTTPTarget.from_url(connection_url)
 		credential = UniCredential.from_url(connection_url)
 		if credential.secret is None:
 			credential = None
 		if target.domain is None and credential is not None:
 			target.domain = credential.domain
+		if proxies is not None:
+			target.proxies = proxies
 		return HTTPConnectionFactory(credential, target)
 
 	def get_credential(self) -> UniCredential:

@@ -65,6 +65,7 @@ class WSNetworkTCPTEST:
 				#print('OUT %s' % data)
 				if data is None or data == b'':
 					return
+				
 				cmd = WSNSocketData(self.token, data)
 				await self.ws.send(cmd.to_bytes())
 		except Exception as e:

@@ -13,11 +13,12 @@ from asysocks.unicomm.protocol.client.http.auth import HTTPAuthManager
 from asysocks.unicomm.protocol.client.http.commons.messages import MockHTTPRequest, HTTPResponse
 from asysocks.unicomm.protocol.client.http.commons.factory import HTTPConnectionFactory
 from asysocks.unicomm.protocol.client.http.transport import HTTPClientTransport
+from asysocks.unicomm.common.proxy import UniProxyTarget
 
 http_url_pattern = re.compile(r'^https?:\/\/')
 
 class ClientSession:
-	def __init__(self, url:str=None, static_headers:Dict[str, str]={}, credential:UniCredential=None, auth_type='auto', ssl_ctx=None, force_sinle_connection:bool=False):
+	def __init__(self, url:str=None, static_headers:Dict[str, str]={}, credential:UniCredential=None, proxies:List[UniProxyTarget] = None, auth_type='auto', ssl_ctx=None, force_sinle_connection:bool=False):
 		self.url = url
 		self.cookiejar:http.cookiejar.CookieJar = http.cookiejar.CookieJar()
 		self.factory:HTTPConnectionFactory = None
@@ -26,8 +27,9 @@ class ClientSession:
 		self.static_headers = static_headers
 		self.force_sinle_connection = force_sinle_connection
 		self.auth_type = auth_type
+		self.proxies = proxies
 		if self.url is not None:
-			self.factory = HTTPConnectionFactory.from_url(url)
+			self.factory = HTTPConnectionFactory.from_url(url, self.proxies)
 		if credential is not None:
 			self.authmanager = HTTPAuthManager.from_credential(self, credential, auth_type=self.auth_type)
 		self.connections = []
@@ -56,7 +58,7 @@ class ClientSession:
 			#		raise Exception('URL was already specified!')
 			
 			self.url = url
-			self.factory = HTTPConnectionFactory.from_url(url)
+			self.factory = HTTPConnectionFactory.from_url(url, self.proxies)
 			if self.factory.get_credential() is not None:
 				self.authmanager = HTTPAuthManager.from_credential(self, self.factory.get_credential(), self.auth_type)
 
