@@ -40,11 +40,11 @@ setup(
 
 	# long_description=open("README.txt").read(),
 	python_requires='>=3.6',
-	classifiers=(
+	classifiers=[
 		"Programming Language :: Python :: 3.6",
 		"License :: OSI Approved :: MIT License",
 		"Operating System :: OS Independent",
-	),
+	],
 	install_requires=[
 		'asn1crypto',
 		'cryptography',
