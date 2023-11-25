@@ -1,6 +1,8 @@
 ![Supported Python versions](https://img.shields.io/badge/python-3.7+-blue.svg) [![Twitter](https://img.shields.io/twitter/follow/skelsec?label=skelsec&style=social)](https://twitter.com/intent/follow?screen_name=skelsec)
 
-:triangular_flag_on_post: This is the public repository of aardwolf, for latest version and updates please consider supporting us through https://porchetta.industries/
+## :triangular_flag_on_post: Sponsors
+
+If you want to sponsor this project, you can do it on GitHub now!
 
 # asysocks
 Asynchronous Socks5 / Socks4 / HTTP proxy client and server library in pure python.
@@ -9,11 +11,6 @@ Asynchronous Socks5 / Socks4 / HTTP proxy client and server library in pure pyth
 
 If you want to sponsors this project and have the latest updates on this project, latest issues fixed, latest features, please support us on https://porchetta.industries/
 
-## Official Discord Channel
-
-Come hang out on Discord!
-
-[![Porchetta Industries](https://discordapp.com/api/guilds/736724457258745996/widget.png?style=banner3)](https://discord.gg/ycGXUxy)
 
 ## what is?
 The primary goal of this project to act as a universal proxy clinet/server library which you can use in your projects.  
@@ -51,8 +48,5 @@ SOCKS5 authentication bruteforcer.
 Quick port scaning via SOCKS4/SOCKS5/HTTP proxies
 ### asysocksproxy
 SOCKS4/SOCKS5/HTTP proxy server. Supports basic monitoring of traffic flow.
-
-## Known issues/limitations
-The biggest limitation at the moment is the lack of SSL support on server side intercepting and the same issue exists on the client side when dealing with delegated queues. Reason is that I still can't find a way to wrap arbitarary data in/out streams with python's built-in `ssl` module. Hope this will change in the future.
 
 For more issues see [Issues](https://github.com/skelsec/asysocks/issues)
