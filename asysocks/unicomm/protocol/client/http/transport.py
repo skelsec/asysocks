@@ -43,6 +43,11 @@ class HTTPClientTransport:
 		if type(data) is h11.ConnectionClosed:
 			self.__disconnect_requested = True
 			return
+		if data == b'':
+			# the client requests the connection to be closed, but we must wait for the server to send the response
+			# this is done correctly in asyncio but the proxies are not asyncio friendly
+			return
+		#print('write: %s' % data)
 		await self.connection.write(data)
 	
 	@property

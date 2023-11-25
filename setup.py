@@ -40,11 +40,11 @@ setup(
 
 	# long_description=open("README.txt").read(),
 	python_requires='>=3.6',
-	classifiers=(
+	classifiers=[
 		"Programming Language :: Python :: 3.6",
 		"License :: OSI Approved :: MIT License",
 		"Operating System :: OS Independent",
-	),
+	],
 	install_requires=[
 		'asn1crypto',
 		'cryptography',
@@ -52,11 +52,11 @@ setup(
 	],
 	entry_points={
 		'console_scripts': [
-			'asysockstunnel = asysocks.examples.sockstunnel:main',
-			'asysockssec = asysocks.examples.sockssec:main',
-			'asysocksbrute = asysocks.examples.socksbrute:main',
-			'asysocksportscan = asysocks.examples.socksportscan:main',
-			'asysocksproxy = asysocks.examples.socksproxy:main',
+			'asysocks-tunnel = asysocks.examples.sockstunnel:main',
+			'asysocks-sec = asysocks.examples.sockssec:main',
+			'asysocks-brute = asysocks.examples.socksbrute:main',
+			'asysocks-portscan = asysocks.examples.socksportscan:main',
+			'asysocks-proxy = asysocks.examples.socksproxy:main',
 		],
 	}
 )

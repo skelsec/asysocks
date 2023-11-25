@@ -58,6 +58,7 @@ class SOCKSClient:
 				finished_tasks, pending_tasks = await asyncio.wait([read_task, proxy_stopped_evt.wait()], return_when=asyncio.FIRST_COMPLETED)
 				for task in finished_tasks:
 					result = await task
+					last_data = b''
 					if result is True:
 						try:
 							for pt in pending_tasks:

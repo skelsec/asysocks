@@ -24,6 +24,7 @@ class HTTPAuthManager:
 
 	@staticmethod
 	def from_credential(session, credential, auth_type:str = 'auto'):
+		auth_type = auth_type.lower()
 		if auth_type == 'auto':
 			if isinstance(credential, (SPNEGOCredential)) is True:
 				return HTTPAuthManagerNegotiate(session, credential)
@@ -47,7 +48,7 @@ class HTTPAuthManager:
 				credential = CREDSSPCredential([credential])
 				return HTTPAuthManagerCredSSP(session, credential)
 		else:
-			raise Exception('Unsupported auth type!')
+			raise Exception('Unsupported auth type! Authtype: %s Credential: %s' % (auth_type, credential.__class__.__name__))
 
 
 class HTTPAuthManagerCredSSP(HTTPAuthManager):
