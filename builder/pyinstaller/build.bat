@@ -17,11 +17,11 @@ GOTO :BUILD
 cd %repo%\..\
 pip install .
 cd %repo%\examples
-pyinstaller -F socksbrute.py %hiddenimports%
-pyinstaller -F socksportscan.py %hiddenimports%
-pyinstaller -F socksproxy.py %hiddenimports%
-pyinstaller -F sockssec.py %hiddenimports%
-pyinstaller -F sockstunnel.py %hiddenimports%
+pyinstaller -F socksbrute.py -n asysocks-brute %hiddenimports%
+pyinstaller -F socksportscan.py -n asysocks-portscan %hiddenimports%
+pyinstaller -F socksproxy.py -n asysocks-proxy %hiddenimports%
+pyinstaller -F sockssec.py -n asysocks-sec %hiddenimports%
+pyinstaller -F sockstunnel.py -n asysocks-tunnel %hiddenimports%
 copy %repo%\examples\dist\*.exe %root%
 GOTO :CLEANUP
 
