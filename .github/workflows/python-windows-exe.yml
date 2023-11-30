@@ -45,11 +45,11 @@ jobs:
       working-directory: ${{ github.workspace }}/builder/pyinstaller
       shell: cmd
     
-    - name: Upload Executable
-      uses: actions/upload-artifact@v2
-      with:
-        name: executable
-        path: builder\pyinstaller\*.exe
+    #- name: Upload Executable
+    #  uses: actions/upload-artifact@v2
+    #  with:
+    #    name: executable
+    #    path: builder\pyinstaller\*.exe
         
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
