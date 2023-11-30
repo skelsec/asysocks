@@ -2,15 +2,10 @@
 
 ## :triangular_flag_on_post: Sponsors
 
-If you want to sponsor this project, you can do it on GitHub now!
+If you like this project, consider sponsoring it on GitHub! [Sponsors](https://github.com/sponsors/skelsec/)
 
 # asysocks
 Asynchronous Socks5 / Socks4 / HTTP proxy client and server library in pure python.
-
-## :triangular_flag_on_post: Sponsors
-
-If you want to sponsors this project and have the latest updates on this project, latest issues fixed, latest features, please support us on https://porchetta.industries/
-
 
 ## what is?
 The primary goal of this project to act as a universal proxy clinet/server library which you can use in your projects.  
