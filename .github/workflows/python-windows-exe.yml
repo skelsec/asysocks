@@ -34,8 +34,9 @@ jobs:
     - name: Determine Version
       id: version
       run: |
-        $VERSION = python -c "import sys; sys.path.append('${{ github.event.repository.name }}'); import _version; print(_version.__version__)"
-        echo "PROJVERSION=$VERSION" >> $GITHUB_ENV
+        $PROJVERSION = python -c "import sys; sys.path.append('${{ github.event.repository.name }}'); import _version; print(_version.__version__)"
+        echo $PROJVERSION
+        echo "PROJVERSION=$PROJVERSION" >> $GITHUB_ENV
       shell: powershell
 
     - name: Install Dependencies
@@ -48,6 +49,7 @@ jobs:
 
     - name: Compress executables
       run: |
+        dir ${{ github.workspace }}\builder\pyinstaller\
         "C:\Program Files\7-Zip\7z.exe a secure.7z ${{ github.workspace }}\builder\pyinstaller\*.exe -pprotected"
     
     - name: Upload Executable
