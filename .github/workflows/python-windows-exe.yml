@@ -49,8 +49,8 @@ jobs:
 
     - name: Compress executables
       run: |
-        dir ${{ github.workspace }}\builder\pyinstaller\
-        "C:\Program Files\7-Zip\7z.exe" a secure.7z "${{ github.workspace }}\builder\pyinstaller\*.exe" -pprotected
+        "C:\Program Files\7-Zip\7z.exe" a secure.7z *.exe -pprotected
+      working-directory: ${{ github.workspace }}/builder/pyinstaller
     
     - name: Upload Executable
       uses: actions/upload-artifact@v2
