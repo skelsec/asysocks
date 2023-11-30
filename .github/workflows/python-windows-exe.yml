@@ -48,7 +48,7 @@ jobs:
 
     - name: Compress executables
       run: |
-        "C:\Program Files\7-Zip\7z.exe a secure.7z builder\pyinstaller\*.exe -pprotected"
+        "C:\Program Files\7-Zip\7z.exe a secure.7z ${{ GITHUB_WORKSPACE }}\builder\pyinstaller\*.exe -pprotected"
     
     - name: Upload Executable
       uses: actions/upload-artifact@v2
@@ -63,4 +63,4 @@ jobs:
 
     - name: Upload Executables to GCS
       run: |
-        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ github.event.repository.name }}/${{ env.PROJVERSION }}/
+        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ github.event.repository.name }}/${{ PROJVERSION }}/
