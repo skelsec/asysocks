@@ -69,3 +69,4 @@ jobs:
         gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ github.event.repository.name }}/$PROJVERSION/
       env:
         PROJVERSION : ${{ env.PROJVERSION }}
+      shell: cmd
