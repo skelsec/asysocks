@@ -35,7 +35,7 @@ jobs:
       id: version
       run: |
         $VERSION = python -c "import sys; sys.path.append('${{ github.event.repository.name }}'); import _version; print(_version.__version__)"
-        echo "PROJVERSION=$VERSION" >> $GITHUB_STATE
+        echo "PROJVERSION=$VERSION" >> $GITHUB_ENV
       shell: powershell
 
     - name: Install Dependencies
@@ -63,4 +63,4 @@ jobs:
 
     - name: Upload Executables to GCS
       run: |
-        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ github.event.repository.name }}/${{ github.core.saveState.PROJVERSION }}/
+        gsutil cp builder\pyinstaller\*.exe gs://skelsec-github-foss/${{ github.event.repository.name }}/${{ env.PROJVERSION }}/
