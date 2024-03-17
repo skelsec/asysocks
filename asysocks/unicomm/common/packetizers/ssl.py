@@ -24,6 +24,7 @@ class PacketizerSSL(Packetizer):
 		self.packetizer.packetizer_control(*args, **kwargs)
 
 	async def do_handshake(self, reader, writer, server_side=False):
+		#print('do_handshake')
 		self.tls_in_buff = ssl.MemoryBIO()
 		self.tls_out_buff = ssl.MemoryBIO()
 		self.tls_obj = self.ssl_ctx.wrap_bio(self.tls_in_buff, self.tls_out_buff, server_side=server_side) # , server_hostname = self.monitor.dst_hostname

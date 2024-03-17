@@ -25,10 +25,11 @@ unitarget_url_params = {
 	'timeout' : int_one,
 	'serverip' : str_one,
 	'dns' : str_one,
+	'privport' : bool_one,
 }
 
 class UniTarget:
-	def __init__(self, ip:str, port:int, protocol:UniProto, timeout:int=5, ssl_ctx:UniSSL=None, hostname:str = None, dc_ip:str = None, domain:str = None, proxies:List[UniProxyTarget] = None, dns:str = None):
+	def __init__(self, ip:str, port:int, protocol:UniProto, timeout:int=5, ssl_ctx:UniSSL=None, hostname:str = None, dc_ip:str = None, domain:str = None, proxies:List[UniProxyTarget] = None, dns:str = None, use_privileged_source_port:bool = False):
 		self.hostname = hostname
 		self.port = port
 		self.protocol = protocol
@@ -37,6 +38,7 @@ class UniTarget:
 		self.dc_ip = dc_ip
 		self.domain = domain
 		self.dns = dns
+		self.use_privileged_source_port = use_privileged_source_port
 		self.proxies:List[UniProxyTarget] = proxies
 		if proxies is None:
 			self.proxies = []
@@ -187,6 +189,7 @@ class UniTarget:
 			domain=domain,
 			proxies=proxies,
 			dns=params['dns'],
+			use_privileged_source_port=params['privport']
 		), extra
 
 	def get_preproxy(self):

@@ -1,6 +1,6 @@
 import asyncio
 import copy
-import ssl
+import random
 import base64
 from asysocks.unicomm.protocol.http import HTTPProxyAuthRequiredException, HTTPResponse, HTTPProxyAuthFailed
 from asysocks.unicomm.protocol.socks4a import SOCKS4ARequest, SOCKS4AReply, SOCKS4ACDCode
@@ -377,6 +377,23 @@ class UniClient:
 			if remote_writer is not None:
 				remote_writer.close()
 			raise
+	
+	async def open_privileged_connection(self):
+		for attempt in range(10):
+			try:
+				# Attempt to use a lower port, incrementing if unsuccessful
+				local_addr = ('0.0.0.0', random.randint(10, 1023))
+				reader, writer = await asyncio.open_connection(self.target.get_ip_or_hostname(), self.target.port, local_addr=local_addr)				
+				return reader, writer, None
+			except PermissionError as e:
+				return None, None, e
+			except OSError as e:
+				if e.errno == 98:  # Port already in use (Linux specific error code, adjust for your OS if necessary)
+					continue  # Try again with a different port
+				return None, None, e
+			except Exception as e:
+				return None, None, e
+		return None, None, Exception("Failed to connect after 10 attempts")
 
 	async def connect(self):
 		packetizer = copy.deepcopy(self.packetizer)
@@ -388,15 +405,20 @@ class UniClient:
 				await packetizer.do_handshake(reader, writer)
 
 		else:
-			if self.target.protocol == UniProto.CLIENT_TCP:
+			if self.target.protocol not in [UniProto.CLIENT_SSL_TCP, UniProto.CLIENT_TCP]:
+				raise Exception('Unknown protocol "%s"' % self.target.protocol)
+			if self.target.use_privileged_source_port is True:
+				# client should use a privileged source port
+				reader, writer, err = await self.open_privileged_connection()
+				if err is not None:
+					raise err
+			else:
 				reader, writer = await asyncio.open_connection(self.target.get_ip_or_hostname(), self.target.port)
-			elif self.target.protocol == UniProto.CLIENT_SSL_TCP:
-				reader, writer = await asyncio.open_connection(self.target.get_ip_or_hostname(), self.target.port)
+
+			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 				ssl_ctx = self.target.get_ssl_context()
 				packetizer = PacketizerSSL(ssl_ctx, packetizer)
 				await packetizer.do_handshake(reader, writer)
-			else:
-				raise Exception('Unknown protocol "%s"' % self.target.protocol)
 
 		return UniConnection(reader, writer, packetizer)
 

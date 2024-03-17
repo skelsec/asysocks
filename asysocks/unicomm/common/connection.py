@@ -1,7 +1,9 @@
 import ssl
 import asyncio
+import traceback
 from asysocks.unicomm.common.packetizers import Packetizer, StreamPacketizer
 from asysocks.unicomm.common.packetizers.ssl import PacketizerSSL
+from asysocks.unicomm.common.transport import UNITransport
 
 class UniConnection:
 	def __init__(self, reader:asyncio.StreamReader, writer:asyncio.StreamWriter, packetizer:Packetizer):
@@ -12,11 +14,19 @@ class UniConnection:
 		self.closing = False
 		self.closed_evt = asyncio.Event()
 
+		self.read_lock:asyncio.Lock = asyncio.Lock()
+		self.read_resume:asyncio.Event = asyncio.Event()
+		self.read_resume.set()
+
 	async def __aenter__(self):
 		return self
 
 	async def __aexit__(self, exc_type, exc, tb):
 		await self.close()
+
+	
+	def get_extra_info(self, name, default=None):
+		return self.writer.get_extra_info(name, default)
 
 	def get_peer_certificate(self):
 		return self.packetizer.get_peer_certificate()
@@ -27,7 +37,6 @@ class UniConnection:
 			self.packetizer.packetizer = packetizer
 		else:
 			self.packetizer = packetizer
-		
 	
 	def packetizer_control(self, *args, **kw):
 		return self.packetizer.packetizer_control(*args, **kw)
@@ -82,6 +91,41 @@ class UniConnection:
 			await self.packetizer.data_in(data)
 			if data == b'':
 				break
+	
+
+	### PROTOCOL INTERFACE
+	async def pause_reading(self):
+		self.read_resume.clear()
+		async with self.read_lock:
+			await self.read_resume.wait()
+	
+	async def __transport_reader(self, protocol:asyncio.Protocol):
+		err = None
+		try:
+			data = None
+			while True:
+				async with self.read_lock:
+					async for result in self.packetizer.data_in(data):
+						if result is None:
+							protocol.eof_received()
+							break
+						protocol.data_received(result)
+					
+					data = await self.reader.read(self.packetizer.buffer_size)
+					if data == b'':
+						protocol.eof_received()
+						break
+		except Exception as e:
+			traceback.print_exc()
+			err = e
+		finally:
+			protocol.connection_lost(err)
+	
+	async def get_transport(self, protocol:asyncio.Protocol):
+		transport = UNITransport(self, protocol)
+		protocol.connection_made(transport)
+		x = asyncio.create_task(self.__transport_reader(protocol))
+		return transport
 
 
 class UniUDPConnection:
