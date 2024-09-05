@@ -134,7 +134,7 @@ class UniSSL:
 				if self.cacert is not None:
 					ssl_ctx.load_verify_locations(cafile=self.__cacertfilename)
 				else:
-					ssl_ctx.load_default_certs(purpose=protocol)
+					ssl_ctx.load_default_certs(purpose=ssl.Purpose.SERVER_AUTH)
 			return ssl_ctx
 		finally:
 			self.__cleanup()

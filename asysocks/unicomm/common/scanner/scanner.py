@@ -20,6 +20,7 @@ class UniScanner:
 		self.host_timeout = host_timeout
 		self.__workers = []
 		self.__targetgen = None
+		self.__targetqueue = None
 		self.out_queue = asyncio.Queue()
 		self.__total_items = 0
 		self.__finished_items = 0
@@ -32,7 +33,7 @@ class UniScanner:
 
 	async def worker(self):
 		while not asyncio.current_task().cancelled():
-			x = await self.__targetgen.__anext__()
+			x = await self.__targetqueue.get()
 			if x is None:
 				return
 			targetid, target = x
@@ -52,19 +53,21 @@ class UniScanner:
 	async def targets(self):
 		for generator in self.target_generators:
 			async for targetid, target in generator.run():
-				yield (targetid, target)
-		while True:
-			yield None
+				await self.__targetqueue.put((targetid, target))
+		for _ in range(len(self.__workers)):
+			await self.__targetqueue.put(None)
 
 	async def scan(self):
 		try:
 			for generator in self.target_generators:
 				self.__total_items += generator.get_total()
 
-			self.__targetgen = self.targets()
-			yield ScannerStarted(self.name)
+			
+			self.__targetqueue = asyncio.Queue(self.worker_count)
 			for _ in range(self.worker_count):
 				self.__workers.append(asyncio.create_task(self.worker()))
+			self.__targetgen = asyncio.create_task(self.targets())
+			yield ScannerStarted(self.name)
 			gather_coro = asyncio.gather(*self.__workers)
 			while gather_coro.done() is False or self.out_queue.qsize() > 0:
 				try:
