@@ -2,6 +2,7 @@ import asyncio
 import copy
 import random
 import base64
+import ipaddress
 from asysocks.unicomm.protocol.http import HTTPProxyAuthRequiredException, HTTPResponse, HTTPProxyAuthFailed
 from asysocks.unicomm.protocol.socks4a import SOCKS4ARequest, SOCKS4AReply, SOCKS4ACDCode
 from asysocks.unicomm.protocol.socks5 import SOCKS5Method, SOCKS5Nego, SOCKS5NegoReply, SOCKS5PlainAuth, \
@@ -16,6 +17,27 @@ from asysocks.unicomm.common.packetizers.ssl import PacketizerSSL
 from asysocks.unicomm.common.connection import UniConnection
 from asysocks.unicomm import logger
 
+class UniClientFactory:
+	def __init__(self, target:UniTarget):
+		self.target = target
+	
+	def get_target(self):
+		return copy.deepcopy(self.target)
+	
+	def get_newtarget(self, ip_or_hostname:str, port:int = None):
+		newtarget = self.get_target()
+		if port is not None:
+			newtarget.port = port
+		try:
+			newtarget.ip = ipaddress.ip_address(ip_or_hostname)
+		except:
+			newtarget.hostname = ip_or_hostname
+		return newtarget
+	
+	def get_client(self, packetizer:Packetizer = None):
+		if packetizer is None:
+			packetizer = Packetizer()
+		return UniClient(self.get_target(), packetizer)
 
 class ProxyChainError(Exception):
 	def __init__(self, innerexception, message="Something failed setting up the proxy chain! See innerexception for more details"):
@@ -383,7 +405,7 @@ class UniClient:
 			try:
 				# Attempt to use a lower port, incrementing if unsuccessful
 				local_addr = ('0.0.0.0', random.randint(10, 1023))
-				reader, writer = await asyncio.open_connection(self.target.get_ip_or_hostname(), self.target.port, local_addr=local_addr)				
+				reader, writer = await asyncio.wait_for(asyncio.open_connection(self.target.get_ip_or_hostname(), self.target.port, local_addr=local_addr), timeout=self.target.timeout)
 				return reader, writer, None
 			except PermissionError as e:
 				return None, None, e
@@ -397,28 +419,58 @@ class UniClient:
 
 	async def connect(self):
 		packetizer = copy.deepcopy(self.packetizer)
+
+		# THIS PART IS ONLY FOR UDP
+		if self.target.protocol == UniProto.CLIENT_UDP:
+			if len(self.target.proxies) > 0:
+				if len(self.target.proxies) > 1:
+					raise Exception('Proxy chaining not supported for UDP!')
+				proxy = self.target.proxies[0]
+				if proxy.protocol != UniProxyProto.CLIENT_WSNET:
+					raise Exception('Only WSNET proxy supported for UDP!')
+				
+				from asysocks.network.wsnet import create_udp_client
+				endpoint = await create_udp_client(self.target)
+				return endpoint
+				
+			
+			else:
+				from asysocks.unicomm.common.connection import DatagramEndpointProtocol, Endpoint
+
+				loop = asyncio.get_event_loop()
+				endpoint = Endpoint(self.target)
+				protocol_factory = lambda: DatagramEndpointProtocol(endpoint)
+				reader, writer = await loop.create_datagram_endpoint(
+					protocol_factory, 
+					local_addr  = self.target.get_sockaddr(),
+					remote_addr = self.target.get_peeraddr(),
+				)
+				return endpoint
+
+
+		# the rest is for TCP
 		if len(self.target.proxies) > 0:
-			reader, writer = await self.create_link()
+			reader, writer = await asyncio.wait_for(self.create_link(), timeout=self.target.timeout)
 			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 				ssl_ctx = self.target.get_ssl_context()
 				packetizer = PacketizerSSL(ssl_ctx, packetizer)
-				await packetizer.do_handshake(reader, writer)
+				await asyncio.wait_for(packetizer.do_handshake(reader, writer), timeout = self.target.timeout)
 
 		else:
 			if self.target.protocol not in [UniProto.CLIENT_SSL_TCP, UniProto.CLIENT_TCP]:
-				raise Exception('Unknown protocol "%s"' % self.target.protocol)
+				raise Exception('Unsupported protocol "%s"' % self.target.protocol)
 			if self.target.use_privileged_source_port is True:
 				# client should use a privileged source port
 				reader, writer, err = await self.open_privileged_connection()
 				if err is not None:
 					raise err
 			else:
-				reader, writer = await asyncio.open_connection(self.target.get_ip_or_hostname(), self.target.port)
-
+				reader, writer = await asyncio.wait_for(asyncio.open_connection(self.target.get_ip_or_hostname(), self.target.port), timeout = self.target.timeout)
+			
 			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 				ssl_ctx = self.target.get_ssl_context()
 				packetizer = PacketizerSSL(ssl_ctx, packetizer)
-				await packetizer.do_handshake(reader, writer)
+				await asyncio.wait_for(packetizer.do_handshake(reader, writer), timeout = self.target.timeout)
 
 		return UniConnection(reader, writer, packetizer)
 

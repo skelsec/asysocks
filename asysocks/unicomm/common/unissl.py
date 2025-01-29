@@ -186,7 +186,7 @@ class UniSSL:
 				pass
 
 	def __str__(self):
-		return 'UniSSL(certfile=%s, keyfile=%s, cacert=%s, verify=%s, protocol=%s)' % (self.certfile, self.keyfile, self.cacert, self.verify, self.protocol)
+		return 'UniSSL(certfile=%s, keyfile=%s, cacert=%s, verify=%s, protocol=%s, password=%s)' % (self.certfile, self.keyfile, self.cacert, self.verify, self.protocol, self.password)
 
 	def __del__(self):
 		self.__cleanup()

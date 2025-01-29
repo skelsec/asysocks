@@ -10,6 +10,7 @@ class PacketizerSSL(Packetizer):
 		self.tls_out_buff:ssl.MemoryBIO = None
 		self.tls_obj:ssl.SSLObject = None
 		self.__plaintext_buffer = []
+		self.__deepdebug = False
 
 	def flush_buffer(self):
 		return self.packetizer.flush_buffer()
@@ -31,37 +32,62 @@ class PacketizerSSL(Packetizer):
 
 		ctr = 0
 		while True:
+			if self.__deepdebug is True:
+				print('DST start %s' % ctr)
+			
+			# setting a maximum number of iterations to avoid infinite loops
+			if ctr > 20:
+				raise Exception('Handshake took too many iterations')
+			
 			ctr += 1
 			try:
 				self.tls_obj.do_handshake()
 			except ssl.SSLWantReadError:
-				#print('DST want %s' % ctr)
-				while True:
+				if self.__deepdebug is True:
+					print('DST want %s' % ctr)
+				
+				# again, we need to limit the number of iterations
+				for _ in range(10):
 					client_hello = self.tls_out_buff.read()
 					if client_hello != b'':
-						#print('DST client_hello %s' % len(client_hello))
+						if self.__deepdebug is True:
+							print('DST client_hello %s' % len(client_hello))
 						writer.write(client_hello)
 						await writer.drain()
 					else:
 						break
+				else:
+					raise Exception('Handshake took too many iterations 2')
 				
-				#print('DST wating server hello %s' % ctr)
+				if self.__deepdebug is True:
+					print('DST wating server hello %s' % ctr)
 				server_hello = await reader.read(self.buffer_size)
-				#print('DST server_hello %s' % len(server_hello))
+				if server_hello is None or server_hello == b'':
+					raise Exception('Connection closed')
+				if ctr == 1 and server_hello[0] != 0x16:
+					if self.__deepdebug is True:
+						print('Server did not send a valid TLS handshake packet')
+					raise Exception('Server did not send a valid TLS handshake packet')
+				if self.__deepdebug is True:
+					print('DST server_hello %s' % len(server_hello))
 				self.tls_in_buff.write(server_hello)
 
 				continue
-			except:
-				raise
+			except Exception as e:
+				raise e
 			else:
-				#print('DST handshake ok %s' % ctr)
+				if self.__deepdebug is True:
+					print('DST handshake ok %s' % ctr)
 				server_fin = self.tls_out_buff.read()
-				#print('DST server_fin %s ' %  server_fin)
+				if self.__deepdebug is True:
+					print('DST server_fin %s ' %  server_fin)
 				if server_fin != b'':
 					writer.write(server_fin)
 					await writer.drain()
 				break
-	
+		if self.__deepdebug is True:
+			print('Handshake done')
+
 	async def data_out(self, data:bytes):
 		outdata = b''
 		async for packetraw in self.packetizer.data_out(data):
@@ -86,7 +112,12 @@ class PacketizerSSL(Packetizer):
 		was_data = False
 		while True:
 			try:
-				data += self.tls_obj.read()
+				# super weird, sometimes the read() call returns an empty byte string, 
+				# sometimes it raises an ssl.SSLWantReadError exception
+				chunk = self.tls_obj.read()
+				if chunk == b'':
+					break
+				data += chunk
 				was_data = True
 			except ssl.SSLWantReadError:
 				break

@@ -103,6 +103,7 @@ class UniCredentialGen:
 class UniTargetGen:
 	def __init__(self):
 		self.targets = []
+		self.excludes = []
 	
 	@staticmethod
 	def from_list(tl):
@@ -129,6 +130,8 @@ class UniTargetGen:
 			self.targets.append((uid, ip))
 		except:
 			for t in ipaddress.ip_network(ip,strict=False):
+				if(str(t).endswith('.0') or str(t).endswith('.255')):
+					continue
 				uid = str(uuid.uuid4())
 				uids.append(uid)
 				self.targets.append((uid, str(t)))
@@ -152,9 +155,24 @@ class UniTargetGen:
 	
 	def get_total(self):
 		return len(self.targets)
+	
+	def check_excludes(self, target):
+		starget = str(target).lower()
+		for exclude in self.excludes:
+			try:
+				ipn = ipaddress.ip_network(exclude)
+				if ipaddress.ip_address(starget) in ipn:
+					return False
+			except:
+				pass
+			if starget == str(exclude).lower():
+				return False
+		return True
 
 	async def run(self):
 		for tid, target in self.targets:
+			if self.check_excludes(target) is False:
+				continue
 			yield (tid, target)
 
 class UniTargetPortGen:
@@ -204,6 +222,8 @@ class UniTargetPortGen:
 			self.targets.append((uid, ip))
 		except:
 			for t in ipaddress.ip_network(ip,strict=False):
+				if(str(t).endswith('.0') or str(t).endswith('.255')):
+					continue
 				uid = str(uuid.uuid4())
 				uids.append(uid)
 				self.targets.append((uid, str(t)))

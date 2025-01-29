@@ -1,4 +1,5 @@
 import base64
+import copy
 from hashlib import sha256
 
 from asysocks.unicomm.protocol.client.http import logger
@@ -10,7 +11,7 @@ from asyauth.common.credentials.ntlm import NTLMCredential
 from asyauth.common.credentials.kerberos import KerberosCredential
 from asyauth.common.credentials.spnego import SPNEGOCredential
 from asyauth.common.credentials.credssp import CREDSSPCredential
-
+from asyauth.common.credentials import UniCredential
 
 class HTTPAuthManager:
 	def __init__(self, session, credential):
@@ -25,6 +26,9 @@ class HTTPAuthManager:
 	@staticmethod
 	def from_credential(session, credential, auth_type:str = 'auto'):
 		auth_type = auth_type.lower()
+		if isinstance(credential, (UniCredential)):
+			credential = credential.build_context()
+
 		if auth_type == 'auto':
 			if isinstance(credential, (SPNEGOCredential)) is True:
 				return HTTPAuthManagerNegotiate(session, credential)
@@ -39,6 +43,9 @@ class HTTPAuthManager:
 			elif isinstance(credential, (NTLMCredential, KerberosCredential)) is True:
 				credential = SPNEGOCredential([credential])
 				return HTTPAuthManagerNegotiate(session, credential)
+			elif hasattr(credential, 'credential') is True and isinstance(credential.credential, (NTLMCredential, KerberosCredential)) is True:
+				credential = SPNEGOCredential([copy.deepcopy(credential.credential)])
+				return HTTPAuthManagerNegotiate(session, credential)
 			else:
 				raise Exception('Credential type %s cannot be used for SPNEGO authentication!' % credential.__class__.__name__)
 		elif auth_type == 'credssp':
@@ -47,6 +54,11 @@ class HTTPAuthManager:
 			elif isinstance(credential, (NTLMCredential, KerberosCredential)) is True:
 				credential = CREDSSPCredential([credential])
 				return HTTPAuthManagerCredSSP(session, credential)
+			elif hasattr(credential, 'credential') is True and isinstance(credential.credential, (NTLMCredential, KerberosCredential)) is True:
+				credential = CREDSSPCredential([copy.deepcopy(credential.credential)])
+				return HTTPAuthManagerNegotiate(session, credential)
+			else:
+				raise Exception('Credential type %s cannot be used for CREDSSP authentication!' % credential.__class__.__name__)
 		else:
 			raise Exception('Unsupported auth type! Authtype: %s Credential: %s' % (auth_type, credential.__class__.__name__))
 

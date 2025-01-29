@@ -51,6 +51,8 @@ class StreamPacketizer:
 			while self.buffer.find(end) == -1:
 				await self.data_incoming_evt.wait()
 				self.data_incoming_evt.clear()
+				if self.stream_ended.is_set():
+					break
 			
 			m = self.buffer.find(end) + len(end)
 			res = self.buffer[:m]
@@ -74,6 +76,8 @@ class StreamPacketizer:
 			while len(self.buffer) < n:
 				await self.data_incoming_evt.wait()
 				self.data_incoming_evt.clear()
+				if self.stream_ended.is_set():
+					break
 			
 			res = self.buffer[:n]
 			self.buffer = self.buffer[n:]
@@ -86,9 +90,12 @@ class StreamPacketizer:
 		if self.__read_lock.locked():
 			raise Exception('A read operation is already in progress!')
 		async with self.__read_lock:
-			while len(self.buffer) == 0 or len(self.buffer) < n:
+			while len(self.buffer) == 0:
 				await self.data_incoming_evt.wait()
 				self.data_incoming_evt.clear()
+				if self.stream_ended.is_set():
+					break
+				
 			if n == -1:
 				n = len(self.buffer)
 			res = self.buffer[:n]
@@ -103,6 +110,7 @@ class StreamPacketizer:
 			raise Exception('More data incoming after stream has ended!')
 		if data == b'':
 			self.stream_ended.set()
+			self.data_incoming_evt.set()
 		else:
 			self.buffer += data
 			self.data_incoming_evt.set()

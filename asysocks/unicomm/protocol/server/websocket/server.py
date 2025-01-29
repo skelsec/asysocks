@@ -147,7 +147,7 @@ class WebSocketClientHandler:
             if 'sec-websocket-key' not in headers:
                 raise Exception('Client tried to connect but was missing a key')
 
-            key = headers['sec-websocket-key']        
+            key = headers['sec-websocket-key']
             response = WebSocketClientHandler.make_handshake_response(key)
             await self.connection.write(response.encode())
         except Exception as e:

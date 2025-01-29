@@ -3,6 +3,7 @@ import traceback
 from tqdm import tqdm
 import datetime
 import sys
+from pathlib import Path
 from asysocks.unicomm.common.scanner.common import *
 
 class UniScannerExecutor:
@@ -17,7 +18,7 @@ class UniScanner:
 		self.name = name
 		self.target_generators = target_generators
 		self.worker_count = worker_count
-		self.host_timeout = host_timeout
+		self.host_timeout = host_timeout if host_timeout > 0 else None
 		self.__workers = []
 		self.__targetgen = None
 		self.__targetqueue = None
@@ -40,6 +41,8 @@ class UniScanner:
 			for executor in self.executors:
 				try:
 					await asyncio.wait_for(executor.run(targetid, target, self.out_queue), self.host_timeout)
+				except asyncio.CancelledError:
+					return
 				except Exception as e:
 					await self.out_queue.put(ScannerError(target, e))
 			
@@ -49,13 +52,18 @@ class UniScanner:
 	async def stop(self):
 		for worker in self.__workers:
 			worker.cancel()
+		if self.__targetgen is not None:
+			self.__targetgen.cancel()
 
 	async def targets(self):
-		for generator in self.target_generators:
-			async for targetid, target in generator.run():
-				await self.__targetqueue.put((targetid, target))
-		for _ in range(len(self.__workers)):
-			await self.__targetqueue.put(None)
+		try:
+			for generator in self.target_generators:
+				async for targetid, target in generator.run():
+					await self.__targetqueue.put((targetid, target))
+			for _ in range(len(self.__workers)):
+				await self.__targetqueue.put(None)
+		except asyncio.CancelledError:
+			pass
 
 	async def scan(self):
 		try:
@@ -83,8 +91,21 @@ class UniScanner:
 			await self.stop()
 			yield ScannerFinished(self.name)
 
+	async def __flush_perionically(self, fhandles):
+		try:
+			while asyncio.current_task().cancelled() is False:
+				await asyncio.sleep(4)
+				for k in fhandles:
+					try:
+						fhandles[k].flush()
+					except:
+						pass
+		except:
+			pass
+
 	async def scan_and_process(self, progress = True, out_file = None, include_errors = False):
 		fhandles = {}
+		flush_task = asyncio.create_task(self.__flush_perionically(fhandles))
 		try:
 			def update_pbar(pbar, rtype):
 				if len(pbar) == 0:
@@ -97,12 +118,18 @@ class UniScanner:
 					for k in pbar:
 						pbar[k].refresh()
 				elif rtype == ScannerResultType.DATA:
-					pbar['results'].update()			
+					pbar['results'].update()
 
 			pbar = {}
+			if out_file is None:
+					out_file = Path.cwd() #os.getcwd()
+			else:
+				if isinstance(out_file, str) is True:
+					out_file = Path(out_file)
+				if out_file.exists() is False:
+					out_file.mkdir(parents = True, exist_ok = True)
+
 			if progress is True:
-				if out_file is None:
-					out_file = os.getcwd()
 				for generator in self.target_generators:
 					self.__total_items += generator.get_total()
 
@@ -112,12 +139,13 @@ class UniScanner:
 
 			async for result in self.scan():
 				update_pbar(pbar, result.type)
+								
 				if result.type == ScannerResultType.ERROR and include_errors is True:
 					if 'error' not in fhandles:
 						if out_file is None:
 							fhandles['error'] = sys.stderr
 						else:
-							fhandles['error'] = open(os.path.join(out_file, '%s_error_%s.tsv' % (str(self.name), self.scantime)), 'w', newline = '')
+							fhandles['error'] = open(os.path.join(out_file.absolute(), '%s_error_%s.tsv' % (str(self.name), self.scantime)), 'w', newline = '')
 					fhandles['error'].write(result.to_line()+'\r\n')
 					
 				elif result.type == ScannerResultType.DATA:
@@ -132,12 +160,13 @@ class UniScanner:
 							if out_file is None:
 								fhandles[rtype] = sys.stdout
 							else:
-								fhandles[rtype] = open(os.path.join(out_file, '%s_%s%s' %(rtype, self.scantime,'.tsv')), 'w', newline = '')
+								fhandles[rtype] = open(os.path.join(out_file.absolute(), '%s_%s%s' %(rtype, self.scantime,'.tsv')), 'w', newline = '')
 						fhandles[rtype].write(result.to_line()+'\r\n')
 
 		except Exception as e:
 			print('SCANNER CRITICAL ERROR %s' % str(e))
 		finally:
+			flush_task.cancel()
 			await self.stop()
 			for k in fhandles:
 				try:

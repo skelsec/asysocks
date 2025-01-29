@@ -1,4 +1,4 @@
-from wsnet.pyodide.client import WSNetworkTCP
+from wsnet.pyodide.client import WSNetworkTCP, WSNetworkUDP
 import asyncio
 
 # This code only works properly in the conditions met in this specific library.
@@ -79,6 +79,11 @@ class WSNETReader:
 	async def __handle_in(self):
 		while True:
 			res, self.err = await self.in_queue.get()
+			if res is None and self.err is None:
+				#this means the connection is closed
+				self.closed_event.set()
+				return
+			
 			if self.err is not None:
 				if res is not None and res != b'':
 					self.buffer += res.data
@@ -177,3 +182,106 @@ class WSNETReader:
 	
 	def at_eof(self):
 		return self.closed_event.is_set() and len(self.buffer) == 0
+
+from asysocks.unicomm.common.target import UniTarget
+
+async def create_udp_client(target:UniTarget):
+	in_q = asyncio.Queue()
+	out_q = asyncio.Queue()
+	connection = WSNetworkUDP(target.get_ip_or_hostname(), target.port, in_q, out_q, reuse_ws = True)
+	_, err = await connection.run()
+	if err is not None:
+		raise err
+	
+	return WSNETEndpoint(target, in_q, out_q)
+
+### THIS CLASS MUST LOOK SIMILAR TO THE ONE IN asysocks/unicomm/common/connection.py
+class WSNETEndpoint:
+	def __init__(self, target:UniTarget, in_queue:asyncio.Queue, out_queue:asyncio.Queue):
+		self.target = target
+		self.in_queue = in_queue
+		self.out_queue = out_queue
+		self._closed = False
+
+	def close(self):
+		if self._closed:
+			return
+		self._closed = True
+		self.out_queue.put_nowait(None)
+		self.in_queue.put_nowait(None)
+
+	async def write(self, data, addr = None):
+		"""Send a datagram to the given address."""
+		if addr is None:
+			addr = (self.target.get_ip_or_hostname(), self.target.port)
+		return self.send(data, addr)
+	
+	async def read(self, with_addr = False):
+		"""Wait for an incoming datagram and return it with
+		the corresponding address.
+		This method is a coroutine.
+		"""
+		while not self._closed:
+			data, addr = await self.receive()
+			if data is None:
+				self.close()
+				break
+
+			result = (data, addr)
+			if with_addr is True:
+				yield result
+			else:
+				yield data
+			
+	async def read_one(self, with_addr = False):
+		"""Wait for an incoming datagram and return it with
+		the corresponding address.
+		This method is a coroutine.
+		"""
+		data, addr = await self.receive()
+		if data is None:
+			self.close()
+			return None
+		if with_addr is True:
+			return (data, addr)
+		return data
+	
+	def send(self, data, addr):
+		"""Send a datagram to the given address."""
+		if self._closed:
+			raise IOError("Enpoint is closed")
+		self.out_queue.put_nowait((data, addr))
+
+	async def receive(self):
+		"""Wait for an incoming datagram and return it with
+		the corresponding address.
+		This method is a coroutine.
+		"""
+		res = await self.in_queue.get()
+		if res is None:
+			raise IOError("Enpoint is closed")
+		data, addr, err = res
+		if err is not None:
+			raise err
+		if data is None:
+			raise IOError("Enpoint is closed")
+		return data, addr
+
+	def abort(self):
+		"""Close the transport immediately."""
+		if self._closed:
+			return
+		self.close()
+
+	async def drain(self):
+		return True
+
+	@property
+	def address(self):
+		"""The endpoint address as a (host, port) tuple."""
+		raise NotImplementedError()
+
+	@property
+	def closed(self):
+		"""Indicates whether the endpoint is closed or not."""
+		return self._closed

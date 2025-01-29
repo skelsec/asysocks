@@ -2,6 +2,7 @@ import enum
 import os
 import datetime
 import traceback
+import json
 
 class ScannerResultType(enum.Enum):
 	STARTED = 'STARTED'
@@ -100,6 +101,23 @@ class ScannerData(ScannerResult):
 			res += separator.join([str(self.resid), line])#  + '\r\n'
 
 		return res
+	
+	def to_dict(self):
+		try:
+			return {
+				'resid' : self.resid,
+				'restype' : str(type(self.data).__name__),
+				'data'  : self.data.to_dict()
+			}
+		except:
+			return {
+				'resid' : self.resid,
+				'restype' : str(type(self.data).__name__),
+				'data'  : self.__flatten_data()
+			}
+	
+	def to_json(self):
+		return json.dumps(self.to_dict())
 
 class ScannerProgress(ScannerResult):
 	def __init__(self, scannername, total, current):

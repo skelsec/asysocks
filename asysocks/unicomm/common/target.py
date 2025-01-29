@@ -29,7 +29,7 @@ unitarget_url_params = {
 }
 
 class UniTarget:
-	def __init__(self, ip:str, port:int, protocol:UniProto, timeout:int=5, ssl_ctx:UniSSL=None, hostname:str = None, dc_ip:str = None, domain:str = None, proxies:List[UniProxyTarget] = None, dns:str = None, use_privileged_source_port:bool = False):
+	def __init__(self, ip:str, port:int, protocol:UniProto, timeout:int=5, ssl_ctx:UniSSL=None, hostname:str = None, dc_ip:str = None, domain:str = None, proxies:List[UniProxyTarget] = None, dns:str = None, use_privileged_source_port:bool = False, srcip:str='', srcport:int = 0):
 		self.hostname = hostname
 		self.port = port
 		self.protocol = protocol
@@ -38,6 +38,8 @@ class UniTarget:
 		self.dc_ip = dc_ip
 		self.domain = domain
 		self.dns = dns
+		self.srcip = srcip
+		self.srcport = srcport
 		self.use_privileged_source_port = use_privileged_source_port
 		self.proxies:List[UniProxyTarget] = proxies
 		if proxies is None:
@@ -128,6 +130,14 @@ class UniTarget:
 		if self.hostname is not None:
 			return self.hostname
 		return self.ip
+	
+	def get_sockaddr(self):
+		if self.srcip == '' or self.srcip is None:
+			return None
+		return (self.srcip, self.srcport)
+	
+	def get_peeraddr(self):
+		return (self.get_ip_or_hostname(), self.port)
 
 	@staticmethod
 	def from_url(connection_url, protocol:UniProto, port:int = None, extraparams:Dict[str, Callable] = {}):
