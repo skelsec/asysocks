@@ -189,7 +189,7 @@ class WebSocketClientHandler:
                 yield opcode, bytes(message_bytes)
         
         except Exception as e:
-            traceback.print_exc()
+            #traceback.print_exc()
             yield None, None
 
     async def send_pong(self, data):

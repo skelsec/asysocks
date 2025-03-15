@@ -98,7 +98,22 @@ class UniTarget:
 				'\tproxysslkey - str - proxy SSL/TLS key path\n' + \
 				'\tproxysslkey_password - str - proxy SSL/TLS key password\n'
 				
-
+	def get_kerberos_target(self, dc_ip = None, hostname=None, domain=None):
+		if dc_ip is None and self.dc_ip is None:
+			raise Exception('DC IP must be provided for kerberos target!')
+		if dc_ip is None:
+			dc_ip = self.dc_ip
+		return UniTarget(
+			dc_ip, 
+			88, 
+			UniProto.CLIENT_TCP, 
+			timeout = self.timeout, 
+			ssl_ctx = None, 
+			hostname = hostname, 
+			dc_ip = dc_ip, 
+			domain = domain, 
+			proxies=copy.deepcopy(self.proxies)
+		)
 
 	def get_newtarget(self, ip, port, hostname = None):
 		return UniTarget(ip, port, self.protocol, self.timeout, ssl_ctx = self.ssl_ctx, hostname = hostname, dc_ip = self.dc_ip, domain = self.domain, proxies=copy.deepcopy(self.proxies))

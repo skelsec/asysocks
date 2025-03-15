@@ -105,7 +105,17 @@ class WSNETReader:
 		try:
 			#print('read')
 			if self.closed_event.is_set():
-				return b''
+				if len(self.buffer) == 0:
+					return b''
+				
+				if n == -1 or len(self.buffer) < n:
+					temp = self.buffer
+					self.buffer = b''
+					return temp
+				else:
+					temp = self.buffer[:n]
+					self.buffer = self.buffer[n:]
+					return temp
 
 			async with self.bufferlock:
 				if n == -1:
@@ -135,7 +145,12 @@ class WSNETReader:
 	async def readexactly(self, n):
 		try:
 			if self.closed_event.is_set():
-				raise Exception('Pipe broken!')
+				if len(self.buffer) == 0 or len(self.buffer) < n:
+					raise Exception('Pipe broken!')
+				else:
+					temp = self.buffer[:n]
+					self.buffer = self.buffer[n:]
+					return temp
 
 			if n < 1:
 				raise Exception('Readexactly must be a positive integer!')
@@ -159,7 +174,14 @@ class WSNETReader:
 	async def readuntil(self, separator = b'\n'):
 		try:
 			if self.closed_event.is_set():
-				raise Exception('Pipe broken!')
+				pos = self.buffer.find(separator) == -1
+				if pos == -1:
+					raise Exception('Pipe broken!')
+				else:
+					end = pos+len(separator)
+					temp = self.buffer[:end]
+					self.buffer = self.buffer[end:]
+					return temp
 
 			async with self.bufferlock:
 				while self.buffer.find(separator) == -1:

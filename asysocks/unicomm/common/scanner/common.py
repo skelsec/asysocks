@@ -13,10 +13,16 @@ class ScannerResultType(enum.Enum):
 	INFO = 'INFO'
 
 class ScannerResult:
-	def __init__(self, type, resid, data = None):
+	def __init__(self, type, resid, data = None, **kwargs):
 		self.type = type
 		self.resid = str(resid)
 		self.data = data
+		self.kwargs = kwargs
+
+	def get_extra_info(self, key):
+		if key in self.kwargs:
+			return self.kwargs[key]
+		return None
 
 	def to_line(self, separator = '\t'):
 		raise NotImplementedError()
@@ -62,12 +68,13 @@ class ScannerError(ScannerResult):
 			return ''.join(traceback.format_tb(self.traceback))
 
 class ScannerData(ScannerResult):
-	def __init__(self, resid, data):
+	def __init__(self, resid, data, **kwargs):
 		ScannerResult.__init__(
 			self,
 			ScannerResultType.DATA,
 			resid,
-			data
+			data=data,
+			**kwargs
 		)
 
 	def get_name(self):
