@@ -50,12 +50,14 @@ class SOCKSClient:
 	async def proxy_stream(in_stream, out_stream, proxy_stopped_evt, buffer_size = 4096, timeout = None):
 		try:
 			while True:
-				read_task = asyncio.wait_for(
+				read_task = asyncio.create_task(asyncio.wait_for(
 					in_stream.read(buffer_size),
 					timeout = timeout
-				)
+				))
 
-				finished_tasks, pending_tasks = await asyncio.wait([read_task, proxy_stopped_evt.wait()], return_when=asyncio.FIRST_COMPLETED)
+				wait_task = asyncio.create_task(proxy_stopped_evt.wait())
+
+				finished_tasks, pending_tasks = await asyncio.wait([read_task, wait_task], return_when=asyncio.FIRST_COMPLETED)
 				for task in finished_tasks:
 					result = await task
 					last_data = b''

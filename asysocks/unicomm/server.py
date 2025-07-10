@@ -3,6 +3,7 @@ import asyncio
 import copy
 import ssl
 import platform
+import traceback
 from asysocks.unicomm.protocol.socks5 import SOCKS5Method, SOCKS5Nego, SOCKS5NegoReply, SOCKS5PlainAuth, \
 	SOCKS5AuthFailed, SOCKS5PlainAuthReply, SOCKS5ReplyType, SOCKS5Request, SOCKS5Reply, \
 	SOCKS5ServerErrorReply
@@ -36,6 +37,48 @@ class UniServer:
 		self.udpprotocol = None
 		self.udptransport = None
 		self.udpsocket = None
+
+	def get_interface_from_ip(self):
+		try:
+			import netifaces
+		except:
+			print('netifaces not found! Install it with "pip install netifaces"	')
+			return []
+		
+		interfaces = []
+		for interface in netifaces.interfaces():
+			addresses = netifaces.ifaddresses(interface)
+			# Check for IPv4 addresses
+			if netifaces.AF_INET in addresses:
+				for addr_info in addresses[netifaces.AF_INET]:
+					if addr_info['addr'] == self.target.ip or self.target.ip in ['','0.0.0.0', '::', '::0']:
+						interfaces.append(interface)
+			# Check for IPv6 addresses
+			if netifaces.AF_INET6 in addresses:
+				for addr_info in addresses[netifaces.AF_INET6]:
+					if addr_info['addr'] == self.target.ip or self.target.ip in ['','0.0.0.0', '::', '::0']:
+						interfaces.append(interface)
+		return interfaces
+	
+	def get_ips_from_interface(self, interface:str, ip_version:int = 4):
+		try:
+			import netifaces
+		except:
+			print('netifaces not found! Install it with "pip install netifaces"	')
+			return []
+		
+		ips = []
+		if ip_version == 4:
+			addresses = netifaces.ifaddresses(interface)
+			if netifaces.AF_INET in addresses:
+				for addr_info in addresses[netifaces.AF_INET]:
+					ips.append(addr_info['addr'])
+		elif ip_version == 6:
+			addresses = netifaces.ifaddresses(interface)
+			if netifaces.AF_INET6 in addresses:
+				for addr_info in addresses[netifaces.AF_INET6]:
+					ips.append(addr_info['addr'])
+		return ips
 	
 	async def run_socks5(self, proxy:UniProxyTarget, connection:UniConnection, timeout:int = None):
 		"""
@@ -234,7 +277,7 @@ class UniServer:
 			if platform.system() == 'Emscripten':
 				from wsnet.pyodide.udpserver import WSNetworkUDPServer
 				protofactory = lambda: UDPProtocol(in_queue)
-				wsnetserver = WSNetworkUDPServer(protofactory, '0.0.0.0', 5355, bindtype = 2, reuse_ws = False)
+				wsnetserver = WSNetworkUDPServer(protofactory, self.target.hostname, 5355, bindtype = 2, reuse_ws = False)
 				servertransport, serverproto, err = await wsnetserver.run()
 				if err is not None:
 					raise err
@@ -243,12 +286,26 @@ class UniServer:
 			import socket
 			import struct
 			sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-			sock.bind(('', 5355))
-			group = ipaddress.ip_address('224.0.0.252').packed
-			mreq = struct.pack('4sL', group, socket.INADDR_ANY)
-			sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
-			sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 			sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+			sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
+
+			sock.bind(('', 5355))
+			llmnr_addr = "224.0.0.252"
+			llmnr_addr6 = "FF02:0:0:0:0:0:1:3"
+
+			# IPv4
+			for ip in self.get_ips_from_interface(self.target.hostname, 4):
+				mreq = socket.inet_aton(llmnr_addr) + socket.inet_aton(ip)
+				sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+
+			# IPv6
+			try:
+				if_index = socket.if_nametoindex(self.target.hostname)
+				mreq6 = socket.inet_pton(socket.AF_INET6, llmnr_addr6) + struct.pack('@I', if_index)
+				sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, mreq6)
+			except Exception as e:
+				pass
+			
 			sock.setblocking(False)
 			protofactory = lambda: UDPProtocol(in_queue)
 			servertransport, serverproto = await asyncio.get_event_loop().create_datagram_endpoint(protofactory, sock=sock)
@@ -262,20 +319,34 @@ class UniServer:
 			if platform.system() == 'Emscripten':
 				from wsnet.pyodide.udpserver import WSNetworkUDPServer
 				protofactory = lambda: UDPProtocol(in_queue)
-				wsnetserver = WSNetworkUDPServer(protofactory, '0.0.0.0', 5353, bindtype = 4, reuse_ws = False)
+				wsnetserver = WSNetworkUDPServer(protofactory, self.target.hostname, 5353, bindtype = 4, reuse_ws = False)
 				servertransport, serverproto, err = await wsnetserver.run()
 				if err is not None:
 					raise err
 				return servertransport, serverproto, wsnetserver.writer, None
+			
 			import socket
 			import struct
 			sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-			sock.bind(('224.0.0.251', 5353))
-			group = ipaddress.ip_address('224.0.0.251').packed
-			mreq = struct.pack("=4sl", group, socket.INADDR_ANY)
-			sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
-			sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 			sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+			sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
+			mdns_addr = "224.0.0.251"
+			mdns_addr6 = "FF02::FB"
+			sock.bind(('', 5353))
+
+			# IPv4
+			for ip in self.get_ips_from_interface(self.target.hostname, 4):
+				mreq = socket.inet_aton(mdns_addr) + socket.inet_aton(ip)
+				sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+
+			# IPv6
+			try:
+				if_index = socket.if_nametoindex(self.target.hostname)
+				mreq6 = socket.inet_pton(socket.AF_INET6, mdns_addr6) + struct.pack('@I', if_index)
+				sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, mreq6)
+			except Exception as e:
+				pass
+			
 			sock.setblocking(False)
 			protofactory = lambda: UDPProtocol(in_queue)
 			servertransport, serverproto = await asyncio.get_event_loop().create_datagram_endpoint(protofactory, sock=sock)
@@ -289,15 +360,19 @@ class UniServer:
 			if platform.system() == 'Emscripten':
 				from wsnet.pyodide.udpserver import WSNetworkUDPServer
 				protofactory = lambda: UDPProtocol(in_queue)
-				wsnetserver = WSNetworkUDPServer(protofactory, '0.0.0.0', 137, bindtype = 3, reuse_ws = False)
+				wsnetserver = WSNetworkUDPServer(protofactory, self.target.hostname, 137, bindtype = 3, reuse_ws = False)
 				servertransport, serverproto, err = await wsnetserver.run()
 				if err is not None:
 					raise err
 				return servertransport, serverproto, wsnetserver.writer, None
+			
 			import socket
 			sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-			sock.bind(('0.0.0.0', 137))
 			sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+			for ip in self.get_ips_from_interface(self.target.hostname, 4):
+				sock.bind((ip, 137))
+				break
+			
 			sock.setblocking(False)
 			protofactory = lambda: UDPProtocol(in_queue)
 			servertransport, serverproto = await asyncio.get_event_loop().create_datagram_endpoint(protofactory, sock=sock)
@@ -308,7 +383,7 @@ class UniServer:
 	async def sendto(self, data, addr):
 		if self.udpsocket is None:
 			raise Exception('UDP Server not started!')
-		if platform.system() == 'Emscripten':
+		if asyncio.iscoroutine(self.udpsocket.sendto) is True:
 			await self.udpsocket.sendto(data, addr)
 		else:
 			self.udpsocket.sendto(data, addr)

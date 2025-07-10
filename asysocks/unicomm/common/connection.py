@@ -302,7 +302,11 @@ class Endpoint:
 		"""Send a datagram to the given address."""
 		if self._closed:
 			raise IOError("Enpoint is closed")
-		self._transport.sendto(data, addr)
+		if asyncio.iscoroutine(self._transport.sendto) is True:
+			# absolutetly not a good idea to do this, but it works
+			x = asyncio.create_task(self._transport.sendto(data, addr))
+		else:
+			self._transport.sendto(data, addr)
 
 	async def receive(self):
 		"""Wait for an incoming datagram and return it with

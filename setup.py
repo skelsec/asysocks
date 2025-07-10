@@ -49,6 +49,7 @@ setup(
 		'asn1crypto',
 		'cryptography',
 		'h11>=0.14.0',
+		#'netifaces>=0.10.4', #for the server modules, but I dont want to force it on everyone
 	],
 	entry_points={
 		'console_scripts': [
