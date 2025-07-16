@@ -11,6 +11,7 @@ class ScannerResultType(enum.Enum):
 	PROGRESS = 'PROGRESS'
 	FINISHED = 'FINISHED'
 	INFO = 'INFO'
+	TARGETDONE = 'TARGETDONE'
 
 class ScannerResult:
 	def __init__(self, type, resid, data = None, **kwargs):
@@ -160,3 +161,15 @@ class ScannerInfo(ScannerResult):
 			res += separator.join(['INFO', str(self.resid), line]) + '\r\n'
 
 		return res
+
+class ScannerTargetDone(ScannerResult):
+	def __init__(self, resid, target):
+		ScannerResult.__init__(
+			self,
+			ScannerResultType.TARGETDONE,
+			resid
+		)
+		self.target = target
+	
+	def to_line(self, separator = '\t'):
+		return separator.join(['TARGETDONE', str(self.resid), str(self.target)])

@@ -48,6 +48,7 @@ class UniScanner:
 			
 			self.__finished_items += 1
 			await self.out_queue.put(ScannerProgress(self.name, self.__total_items, self.__finished_items))
+			await self.out_queue.put(ScannerTargetDone(targetid, target))
 
 	async def stop(self):
 		for worker in self.__workers:
