@@ -4,6 +4,7 @@ import copy
 import ssl
 import platform
 import traceback
+from typing import Callable
 from asysocks.unicomm.protocol.socks5 import SOCKS5Method, SOCKS5Nego, SOCKS5NegoReply, SOCKS5PlainAuth, \
 	SOCKS5AuthFailed, SOCKS5PlainAuthReply, SOCKS5ReplyType, SOCKS5Request, SOCKS5Reply, \
 	SOCKS5ServerErrorReply
@@ -471,6 +472,87 @@ class UniServer:
 				except:
 					pass
 			
+	
+	async def udp_dispatcher(self, connection_callback:Callable[[UniUDPConnection], None]):
+		try:
+			while True:
+				socket, data, addr = await self.udpprotocol.in_queue.get()
+				x = asyncio.create_task(connection_callback(UniUDPConnection(socket, data, addr)))
+		finally:
+			if self.udptransport is not None:
+				try:
+					self.udptransport.close()
+				except Exception as e:
+					pass
+			if self.udpprotocol is not None:
+				try:
+					self.udpprotocol.close()
+				except Exception as e:
+					pass
+			if self.udpsocket is not None:
+				try:
+					self.udpsocket.close()
+				except Exception as e:
+					pass
+
+	async def tcp_dispatcher(self, server, connection_callback:Callable[[UniConnection], None]):
+		try:
+			while not server.closed_evt.is_set():
+				connection = await self.connection_queue.get()
+				x = asyncio.create_task(connection_callback(connection))
+		finally:
+			if server is not None:
+				try:
+					server.close()
+				except:
+					pass
+
+	async def tcp_dispatcher_builtin(self, server, connection_callback:Callable[[UniConnection], None]):
+		try:
+			while server.is_serving():
+				connection = await self.connection_queue.get()
+				x = asyncio.create_task(connection_callback(connection))
+		finally:
+			if server is not None:
+				try:
+					server.close()
+				except:
+					pass
+
+
+	async def serve_callback(self, connection_callback:Callable[[UniConnection], None]):
+		server = None
+		try:
+			if self.target.protocol == UniProto.SERVER_UDP:
+				_, err = await self.start_udp_server()
+				if err is not None:
+					raise err
+
+				dispatcher_task = asyncio.create_task(self.udp_dispatcher(connection_callback))
+			
+			else:
+				if len(self.target.proxies) > 0:
+					server, err = await self.create_link()
+					if err is not None:
+						raise err
+					
+					dispatcher_task = asyncio.create_task(self.tcp_dispatcher(server, connection_callback))
+
+				else:
+					if self.target.protocol in [UniProto.SERVER_TCP, UniProto.SERVER_SSL_TCP]:
+						if self.target.protocol == UniProto.SERVER_TCP:
+							server = await asyncio.start_server(self.__handle_connection, self.target.get_ip_or_hostname(), self.target.port)
+						elif self.target.protocol == UniProto.SERVER_SSL_TCP:
+							server = await asyncio.start_server(self.__handle_connection_ssl, self.target.get_ip_or_hostname(), self.target.port)
+						dispatcher_task = asyncio.create_task(self.tcp_dispatcher_builtin(server, connection_callback))
+
+					else:
+						raise Exception('Unknown protocol "%s"' % self.target.protocol)
+
+			return dispatcher_task, None
+		except Exception as e:
+			return None, e
+
 
 async def amain():
 	import logging

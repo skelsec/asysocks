@@ -221,18 +221,18 @@ class HTTPServer:
                     break
         except Exception as e:
             traceback.print_exc()
+        finally:
             await connection.close()
-
     
     async def serve(self):
         try:
             packetizer = Packetizer()
             server = UniServer(self.target, packetizer)
-            async for connection in server.serve():
-                x = asyncio.create_task(self.__handle_connection(connection))
+            return await server.serve_callback(self.__handle_connection)
 
         except Exception as e:
             traceback.print_exc()
+            return None, e
 
 async def relaytest():
     from asyauth.protocols.spnego.relay.native import spnegorelay_ntlm_factory
