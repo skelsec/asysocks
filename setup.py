@@ -58,6 +58,8 @@ setup(
 			'asysocks-brute = asysocks.examples.socksbrute:main',
 			'asysocks-portscan = asysocks.examples.socksportscan:main',
 			'asysocks-proxy = asysocks.examples.socksproxy:main',
+			'asysocks-fileserver = asysocks.examples.fileserver:main',
+			'asysocks-webdav = asysocks.examples.webdavserver:main',
 		],
 	}
 )
