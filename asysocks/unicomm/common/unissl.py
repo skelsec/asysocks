@@ -96,7 +96,8 @@ class UniSSL:
 		from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
 		''' Decrypts the .pfx file to be used with requests. '''
 		pfx = Path(pfx_path).read_bytes()
-		private_key, main_cert, add_certs = load_key_and_certificates(pfx, pfx_password.encode('utf-8'), None)
+		pfx_pass_encoded = pfx_password.encode('utf-8') if pfx_password else None
+		private_key, main_cert, add_certs = load_key_and_certificates(pfx, pfx_pass_encoded, None)
 		suffix = '%s.pem' % os.urandom(4).hex()
 		self.__keyfilename = 'key_%s' % suffix
 		self.__certfilename = 'cert_%s' % suffix
