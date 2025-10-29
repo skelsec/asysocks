@@ -31,11 +31,11 @@ class UniConnection:
 		await self.close()
 		
 	def get_extra_info(self, name, default=None):
+		if hasattr(self.writer, 'get_extra_info'):
+			return self.writer.get_extra_info(name, default)
+		
 		if name == 'peername' and self.peer_ip is not None:
 			return (self.peer_ip, self.peer_port)
-		
-		if hasattr(self.reader, 'get_extra_info'):
-			return self.reader.get_extra_info(name, default)
 		
 		return default
 
