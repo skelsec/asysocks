@@ -301,13 +301,13 @@ def main():
 	import argparse
 
 	parser = argparse.ArgumentParser(description='SOCKS/HTTP proxy port scanner')
-	parser.add_argument('-p', '--port', action='append', required= True, help='port to scan / port range to scan / port range file. can be stacked')
+	parser.add_argument('-p', '--port', action='append', required= True, help='Port to scan / port range to scan / port range file. Can be stacked')
 	parser.add_argument('--timeout', type = int, default = None, help='Scan retries sleep time')
 	parser.add_argument('-r', '--retries', type = int, default = 1, help='Retries for testing the port')
 	parser.add_argument('-w', '--worker-count', type = int, default = 1, help='Parallelism')
 	parser.add_argument('-v', '--verbose', action='count', default=0)
-	parser.add_argument('-t', '--target', action='append', required=True, help='IP address / IP range (CDIR) / targets file')
-	parser.add_argument('proxies', nargs='*', help='connection string(s) of the target proxy. if you want a chain of proxies')
+	parser.add_argument('-t', '--target', action='append', required=True, help='IP address / IP range (CIDR) / targets file')
+	parser.add_argument('proxies', nargs='*', help='Connection string(s) of the target proxy. if you want a chain of proxies')
 
 
 	args = parser.parse_args()
