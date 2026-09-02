@@ -24,7 +24,7 @@ def main():
 	parser.add_argument('--verify-host', help='Destination host to test proxy on')
 	parser.add_argument('--verify-port', type = int, help='Destination port to test proxy on')
 	parser.add_argument('--verify-send', help='Data to send to destination to test the proxy')
-	parser.add_argument('--verify-recv', help='Data expected to be recieved from the destination via proxy')
+	parser.add_argument('--verify-recv', help='Data expected to be received from the destination via proxy')
 
 	parser.add_argument('-u', '--username', help='Username for proxy auth')
 	parser.add_argument('-p', '--password', help='Password for proxy auth')

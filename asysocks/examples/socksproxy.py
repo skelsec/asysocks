@@ -14,11 +14,11 @@ async def amain():
 		parser.add_argument('--listen-port', type = int, default = 1080, help='Listen port')
 		parser.add_argument('--cert', help='SSL certificate file')
 		parser.add_argument('--key', help='SSL key file')
-		parser.add_argument('--client-timeout', type=int, default=10, help='How much time to wait ftill the client finishes initial handshake')
+		parser.add_argument('--client-timeout', type=int, default=10, help='How much time to wait until the client finishes initial handshake')
 		parser.add_argument('--buffer-size', type=int, default=10240, help='Proxy buffer size')
 		parser.add_argument('-m', '--monitor', action='store_true', help='Monitor mode.')
 		parser.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity')
-		parser.add_argument('-s', '--silent', action='store_true', help = 'dont print banner')
+		parser.add_argument('-s', '--silent', action='store_true', help = "Don't print banner")
 
 		args = parser.parse_args()
 
