@@ -1,16 +1,19 @@
 
 import copy
 import enum
-from asyauth.common.credentials import UniCredential
+# NOTE: asyauth is imported lazily inside from_url() to avoid a circular
+# dependency between asysocks and asyauth (see
+# https://github.com/skelsec/asyauth/issues/16).
 from asysocks.unicomm.protocol.client.http.commons.target import HTTPTarget
 
 class HTTPConnectionFactory:
-	def __init__(self, credential:UniCredential = None, target:HTTPTarget = None ):
+	def __init__(self, credential:'UniCredential' = None, target:HTTPTarget = None ):
 		self.credential = credential
 		self.target = target
 	
 	@staticmethod
 	def from_url(connection_url, proxies = None):
+		from asyauth.common.credentials import UniCredential
 		target = HTTPTarget.from_url(connection_url)
 		credential = UniCredential.from_url(connection_url)
 		if credential.secret is None:
@@ -21,7 +24,7 @@ class HTTPConnectionFactory:
 			target.proxies = proxies
 		return HTTPConnectionFactory(credential, target)
 
-	def get_credential(self) -> UniCredential:
+	def get_credential(self) -> 'UniCredential':
 		"""
 		Creates a credential object
 		

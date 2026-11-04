@@ -15,6 +15,8 @@ from asysocks.unicomm.common.proxy import UniProxyProto, UniProxyTarget
 from asysocks.unicomm.common.packetizers import Packetizer, StreamPacketizer
 from asysocks.unicomm.common.packetizers.ssl import PacketizerSSL
 from asysocks.unicomm.common.connection import UniConnection, UniUDPConnection
+from asysocks.unicomm.common import socktrack
+from asysocks.unicomm.common.socktrack import track_open, track_fail, KIND_INBOUND
 from asysocks.unicomm import logger
 from asysocks.unicomm.client import UniClient
 from asysocks.unicomm.protocol.server.udp import UDPProtocol
@@ -231,20 +233,33 @@ class UniServer:
 				remote_writer.close()
 			raise
 
+	def __track_inbound(self, writer):
+		if socktrack.TRACKER is None:
+			return None
+		peer = writer.get_extra_info('peername') if hasattr(writer, 'get_extra_info') else None
+		return track_open(writer, peer, KIND_INBOUND, origin='server:%s:%s' % (self.target.get_ip_or_hostname(), self.target.port))
+
 	async def __handle_connection(self, reader, writer):
+		sockrec = self.__track_inbound(writer)
 		packetizer = copy.deepcopy(self.packetizer)
-		connection = UniConnection(reader, writer, packetizer)
+		connection = UniConnection(reader, writer, packetizer, sockrec=sockrec)
 		await self.connection_queue.put(connection)
 		#await connection.closed_evt.wait()
 
 	async def __handle_connection_ssl(self, reader, writer):
 		ssl_ctx = None
+		sockrec = self.__track_inbound(writer)
 		try:
 			packetizer = copy.deepcopy(self.packetizer)
 			ssl_ctx = self.target.get_ssl_context(ssl.PROTOCOL_TLS_SERVER)
 			packetizer = PacketizerSSL(ssl_ctx, packetizer)
-			await packetizer.do_handshake(reader, writer, server_side=True)
-			connection = UniConnection(reader, writer, packetizer)
+			try:
+				await packetizer.do_handshake(reader, writer, server_side=True)
+			except BaseException:
+				track_fail(sockrec)
+				writer.close()
+				raise
+			connection = UniConnection(reader, writer, packetizer, sockrec=sockrec)
 			await self.connection_queue.put(connection)
 			#await connection.closed_evt.wait()
 		finally:
