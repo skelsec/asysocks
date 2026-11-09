@@ -498,7 +498,7 @@ class UniClient:
 		try:
 			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 				ssl_ctx = self.target.get_ssl_context()
-				packetizer = PacketizerSSL(ssl_ctx, packetizer, server_hostname=self.target.get_hostname())
+				packetizer = PacketizerSSL(ssl_ctx, packetizer, server_hostname=self.target.get_hostname_or_ip())
 				await asyncio.wait_for(packetizer.do_handshake(reader, writer), timeout = self.target.timeout)
 		except BaseException:
 			track_fail(sockrec)

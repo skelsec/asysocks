@@ -119,10 +119,12 @@ class UniTarget:
 		return UniTarget(ip, port, self.protocol, self.timeout, ssl_ctx = self.ssl_ctx, hostname = hostname, dc_ip = self.dc_ip, domain = self.domain, proxies=copy.deepcopy(self.proxies))
 
 	def get_ssl_context(self, protocol = None):
+		is_server = True if self.protocol in [UniProto.SERVER_TCP, UniProto.SERVER_SSL_TCP, UniProto.SERVER_UDP] else False
 		if self.ssl_ctx is None:
-			is_server = True if self.protocol in [UniProto.SERVER_TCP, UniProto.SERVER_SSL_TCP, UniProto.SERVER_UDP] else False
 			self.ssl_ctx = UniSSL.get_noverify_context(is_server)
-		
+		if protocol is None:
+			# ssl.SSLContext(None) falls back to PROTOCOL_TLS which never verifies the peer
+			protocol = ssl.PROTOCOL_TLS_SERVER if is_server else ssl.PROTOCOL_TLS_CLIENT
 		return self.ssl_ctx.get_ssl_context(protocol)
 		
 
