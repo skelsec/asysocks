@@ -2,10 +2,11 @@ import ssl
 from asysocks.unicomm.common.packetizers import Packetizer
 
 class PacketizerSSL(Packetizer):
-	def __init__(self, ssl_ctx, packetizer:Packetizer):
+	def __init__(self, ssl_ctx, packetizer:Packetizer, server_hostname=None):
 		Packetizer.__init__(self, 16384)
 		self.ssl_ctx:ssl.SSLContext = ssl_ctx
 		self.packetizer = packetizer
+		self.server_hostname = server_hostname
 		self.tls_in_buff:ssl.MemoryBIO = None
 		self.tls_out_buff:ssl.MemoryBIO = None
 		self.tls_obj:ssl.SSLObject = None
@@ -20,6 +21,9 @@ class PacketizerSSL(Packetizer):
 	
 	def get_peer_certificate(self):
 		return self.tls_obj.getpeercert(binary_form=True)
+
+	def get_ssl_object(self):
+		return self.tls_obj
 	
 	def packetizer_control(self, *args, **kwargs):
 		self.packetizer.packetizer_control(*args, **kwargs)
@@ -28,7 +32,12 @@ class PacketizerSSL(Packetizer):
 		#print('do_handshake')
 		self.tls_in_buff = ssl.MemoryBIO()
 		self.tls_out_buff = ssl.MemoryBIO()
-		self.tls_obj = self.ssl_ctx.wrap_bio(self.tls_in_buff, self.tls_out_buff, server_side=server_side) # , server_hostname = self.monitor.dst_hostname
+		self.tls_obj = self.ssl_ctx.wrap_bio(
+			self.tls_in_buff,
+			self.tls_out_buff,
+			server_side=server_side,
+			server_hostname=None if server_side else self.server_hostname,
+		)
 
 		ctr = 0
 		while True:

@@ -6,12 +6,10 @@ from asysocks.unicomm.protocol.client.http import logger
 from asysocks.unicomm.common.target import UniProto
 from asysocks.unicomm.protocol.client.http.requestmgr import RequestManager
 
-from asyauth.common.winapi.constants import ISC_REQ
-from asyauth.common.credentials.ntlm import NTLMCredential
-from asyauth.common.credentials.kerberos import KerberosCredential
-from asyauth.common.credentials.spnego import SPNEGOCredential
-from asyauth.common.credentials.credssp import CREDSSPCredential
-from asyauth.common.credentials import UniCredential
+# NOTE: asyauth imports are intentionally deferred into the functions that use
+# them to avoid a circular dependency between asysocks and asyauth (see
+# https://github.com/skelsec/asyauth/issues/16). asysocks is the lower
+# (transport) layer and must be importable without pulling in asyauth.
 
 class HTTPAuthManager:
 	def __init__(self, session, credential):
@@ -25,9 +23,16 @@ class HTTPAuthManager:
 
 	@staticmethod
 	def from_credential(session, credential, auth_type:str = 'auto'):
+		from asyauth.common.credentials import UniCredential
+		from asyauth.common.credentials.ntlm import NTLMCredential
+		from asyauth.common.credentials.kerberos import KerberosCredential
+		from asyauth.common.credentials.spnego import SPNEGOCredential
+		from asyauth.common.credentials.credssp import CREDSSPCredential
+
 		auth_type = auth_type.lower()
 		if isinstance(credential, (UniCredential)):
-			credential = credential.build_context()
+			if not isinstance(credential, (CREDSSPCredential, SPNEGOCredential)):
+				credential = credential.build_context()
 
 		if auth_type == 'auto':
 			if isinstance(credential, (SPNEGOCredential)) is True:
@@ -35,6 +40,8 @@ class HTTPAuthManager:
 			elif isinstance(credential, (NTLMCredential, KerberosCredential)) is True:
 				credential = SPNEGOCredential([credential])
 				return HTTPAuthManagerNegotiate(session, credential)
+			elif isinstance(credential, CREDSSPCredential):
+				return HTTPAuthManagerCredSSP(session, credential)
 			else:
 				raise Exception('No supported auth type found!')
 		elif auth_type == 'spnego':
@@ -64,12 +71,13 @@ class HTTPAuthManager:
 
 
 class HTTPAuthManagerCredSSP(HTTPAuthManager):
-	def __init__(self, session, credential:CREDSSPCredential):
+	def __init__(self, session, credential:'CREDSSPCredential'):
 		HTTPAuthManager.__init__(self, session, credential)
 		self.auth_steps = False
 		self.cb_data = None
 	
 	async def authenticate(self, requestmanager):
+		from asyauth.common.winapi.constants import ISC_REQ
 		self.status = 'progress'
 		authreply = None
 		domain = 'UNKNOWN'
@@ -127,12 +135,13 @@ class HTTPAuthManagerCredSSP(HTTPAuthManager):
 				return response
 			
 class HTTPAuthManagerNegotiate(HTTPAuthManager):
-	def __init__(self, session, credential:SPNEGOCredential):
+	def __init__(self, session, credential:'SPNEGOCredential'):
 		HTTPAuthManager.__init__(self, session, credential)
 		self.auth_steps = False
 		self.cb_data = None
 	
 	async def authenticate(self, requestmanager):
+		from asyauth.common.winapi.constants import ISC_REQ
 		self.status = 'progress'
 		authreply = None
 		domain = 'UNKNOWN'

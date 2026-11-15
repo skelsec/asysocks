@@ -7,7 +7,9 @@ import http.cookiejar
 from urllib.parse import urlparse, urljoin
 from typing import List, Tuple, Any, Dict
 
-from asyauth.common.credentials import UniCredential
+# NOTE: asyauth is only referenced in type annotations here, so it is not
+# imported at module load to avoid a circular dependency with asyauth
+# (see https://github.com/skelsec/asyauth/issues/16).
 from asysocks.unicomm.protocol.client.http.requestmgr import RequestManager
 from asysocks.unicomm.protocol.client.http.auth import HTTPAuthManager
 from asysocks.unicomm.protocol.client.http.commons.messages import MockHTTPRequest, HTTPResponse
@@ -18,7 +20,7 @@ from asysocks.unicomm.common.proxy import UniProxyTarget
 http_url_pattern = re.compile(r'^https?:\/\/')
 
 class ClientSession:
-	def __init__(self, url:str=None, static_headers:Dict[str, str]={}, credential:UniCredential=None, proxies:List[UniProxyTarget] = None, auth_type='auto', ssl_ctx=None, force_sinle_connection:bool=False):
+	def __init__(self, url:str=None, static_headers:Dict[str, str]={}, credential:'UniCredential'=None, proxies:List[UniProxyTarget] = None, auth_type='auto', ssl_ctx=None, force_sinle_connection:bool=False):
 		self.url = url
 		self.cookiejar:http.cookiejar.CookieJar = http.cookiejar.CookieJar()
 		self.factory:HTTPConnectionFactory = None

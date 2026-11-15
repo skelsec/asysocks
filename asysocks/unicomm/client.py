@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import errno
 import random
 import base64
 import ipaddress
@@ -15,7 +16,11 @@ from asysocks.unicomm.common.proxy import UniProxyProto, UniProxyTarget
 from asysocks.unicomm.common.packetizers import Packetizer
 from asysocks.unicomm.common.packetizers.ssl import PacketizerSSL
 from asysocks.unicomm.common.connection import UniConnection
+from asysocks.unicomm.common.exclude import check_target_excluded
+from asysocks.unicomm.common.socktrack import track_open, track_close, track_fail, KIND_TCP, KIND_PROXY, KIND_VIRTUAL, KIND_UDP
 from asysocks.unicomm import logger
+
+_ADDR_IN_USE_ERRNOS = tuple(x for x in (errno.EADDRINUSE, getattr(errno, 'WSAEADDRINUSE', None)) if x is not None)
 
 class UniClientFactory:
 	def __init__(self, target:UniTarget):
@@ -248,8 +253,13 @@ class UniClient:
 			return False, e
 	
 	async def create_link(self):
+		remote_reader, remote_writer, _ = await self._create_link()
+		return remote_reader, remote_writer
+
+	async def _create_link(self):
 		remote_writer = None
 		remote_reader = None
+		sockrec = None
 
 		try:
 			logger.debug('[handle_client] Client connected!')
@@ -259,7 +269,10 @@ class UniClient:
 
 			for _ in range(3, 0 , -1): #this is for HTTP auth...
 				if remote_writer is not None:
+					track_close(sockrec)
+					sockrec = None
 					remote_writer.close()
+					remote_writer = None
 				
 				try:
 					proxy = copy.deepcopy(self.target.proxies[0])
@@ -331,6 +344,12 @@ class UniClient:
 				except:
 					logger.debug('Failed to connect to SOCKS server!')
 					raise
+
+				sockrec = track_open(
+					remote_writer,
+					self.target,
+					KIND_PROXY if getattr(remote_writer, 'transport', None) is not None else KIND_VIRTUAL,
+				)
 					
 				try:
 					for i, proxy in enumerate(self.target.proxies):
@@ -392,10 +411,12 @@ class UniClient:
 				except:
 					raise
 					
-			return remote_reader, remote_writer
+			return remote_reader, remote_writer, sockrec
 		
-		except Exception as e:
-			logger.debug('[handle_client] Exception: %s' % e)
+		except BaseException as e:
+			# BaseException: wait_for timeouts/cancellation must not leak the socket
+			logger.debug('[handle_client] Exception: %r' % e)
+			track_fail(sockrec)
 			if remote_writer is not None:
 				remote_writer.close()
 			raise
@@ -410,14 +431,24 @@ class UniClient:
 			except PermissionError as e:
 				return None, None, e
 			except OSError as e:
-				if e.errno == 98:  # Port already in use (Linux specific error code, adjust for your OS if necessary)
+				if e.errno in _ADDR_IN_USE_ERRNOS:
 					continue  # Try again with a different port
 				return None, None, e
 			except Exception as e:
 				return None, None, e
 		return None, None, Exception("Failed to connect after 10 attempts")
 
+	def target_exclude_check(self):
+		# Raises TargetExcludedException if the target IP or hostname is on the
+		# process-global exclude list. Only the immediate target is checked;
+		# proxy hops are not (we can't know what a proxied IP/hostname resolves to).
+		check_target_excluded(
+			getattr(self.target, 'ip', None),
+			getattr(self.target, 'hostname', None),
+		)
+
 	async def connect(self):
+		self.target_exclude_check()
 		packetizer = copy.deepcopy(self.packetizer)
 
 		# THIS PART IS ONLY FOR UDP
@@ -440,22 +471,18 @@ class UniClient:
 				loop = asyncio.get_event_loop()
 				endpoint = Endpoint(self.target)
 				protocol_factory = lambda: DatagramEndpointProtocol(endpoint)
-				reader, writer = await loop.create_datagram_endpoint(
+				transport, _ = await loop.create_datagram_endpoint(
 					protocol_factory, 
 					local_addr  = self.target.get_sockaddr(),
 					remote_addr = self.target.get_peeraddr(),
 				)
+				track_open(transport, self.target, KIND_UDP, owner=endpoint)
 				return endpoint
 
 
 		# the rest is for TCP
 		if len(self.target.proxies) > 0:
-			reader, writer = await asyncio.wait_for(self.create_link(), timeout=self.target.timeout)
-			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
-				ssl_ctx = self.target.get_ssl_context()
-				packetizer = PacketizerSSL(ssl_ctx, packetizer)
-				await asyncio.wait_for(packetizer.do_handshake(reader, writer), timeout = self.target.timeout)
-
+			reader, writer, sockrec = await asyncio.wait_for(self._create_link(), timeout=self.target.timeout)
 		else:
 			if self.target.protocol not in [UniProto.CLIENT_SSL_TCP, UniProto.CLIENT_TCP]:
 				raise Exception('Unsupported protocol "%s"' % self.target.protocol)
@@ -466,13 +493,19 @@ class UniClient:
 					raise err
 			else:
 				reader, writer = await asyncio.wait_for(asyncio.open_connection(self.target.get_ip_or_hostname(), self.target.port), timeout = self.target.timeout)
-			
+			sockrec = track_open(writer, self.target, KIND_TCP)
+
+		try:
 			if self.target.protocol == UniProto.CLIENT_SSL_TCP:
 				ssl_ctx = self.target.get_ssl_context()
-				packetizer = PacketizerSSL(ssl_ctx, packetizer)
+				packetizer = PacketizerSSL(ssl_ctx, packetizer, server_hostname=self.target.get_hostname())
 				await asyncio.wait_for(packetizer.do_handshake(reader, writer), timeout = self.target.timeout)
+		except BaseException:
+			track_fail(sockrec)
+			writer.close()
+			raise
 
-		return UniConnection(reader, writer, packetizer)
+		return UniConnection(reader, writer, packetizer, sockrec=sockrec)
 
 async def amain():
 	import logging

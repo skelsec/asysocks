@@ -7,10 +7,13 @@ from asysocks.unicomm.common.target import UniTarget
 from asysocks.unicomm.common.packetizers import Packetizer, StreamPacketizer
 from asysocks.unicomm.common.packetizers.ssl import PacketizerSSL
 from asysocks.unicomm.common.transport import UNITransport
+from asysocks.unicomm.common.socktrack import track_attach, track_close, track_eof
 
 
 class UniConnection:
-	def __init__(self, reader:asyncio.StreamReader, writer:asyncio.StreamWriter, packetizer:Packetizer, peer_ip:str = None, peer_port:int = None):
+	def __init__(self, reader:asyncio.StreamReader, writer:asyncio.StreamWriter, packetizer:Packetizer, peer_ip:str = None, peer_port:int = None, sockrec = None):
+		self.sockrec = sockrec
+		track_attach(sockrec, self)
 		self.reader = reader
 		self.writer = writer
 		self.packetizer = packetizer
@@ -41,6 +44,11 @@ class UniConnection:
 
 	def get_peer_certificate(self):
 		return self.packetizer.get_peer_certificate()
+
+	def get_ssl_object(self):
+		if hasattr(self.packetizer, 'get_ssl_object'):
+			return self.packetizer.get_ssl_object()
+		return None
 	
 	def change_packetizer(self, packetizer):
 		rem_data = self.packetizer.flush_buffer()
@@ -52,20 +60,21 @@ class UniConnection:
 	def packetizer_control(self, *args, **kw):
 		return self.packetizer.packetizer_control(*args, **kw)
 
-	async def wrap_ssl(self, ssl_ctx = None, packetizer = None):
+	async def wrap_ssl(self, ssl_ctx = None, packetizer = None, server_hostname = None):
 		if packetizer is None:
 			packetizer = self.packetizer
 		if ssl_ctx is None:
 			ssl_ctx = ssl.create_default_context()
 			ssl_ctx.check_hostname = False
 			ssl_ctx.verify_mode = ssl.CERT_NONE
-		self.packetizer = PacketizerSSL(ssl_ctx, packetizer)
+		self.packetizer = PacketizerSSL(ssl_ctx, packetizer, server_hostname=server_hostname)
 		await self.packetizer.do_handshake(self.reader, self.writer)
 
 	async def close(self):
 		self.closing = True
 		if self.writer is not None:
 			self.writer.close()
+		track_close(self.sockrec)
 		self.closed_evt.set()
 
 	async def drain(self):
@@ -91,6 +100,7 @@ class UniConnection:
 				
 				data = await self.reader.read(self.packetizer.buffer_size)
 				if data == b'':
+					track_eof(self.sockrec)
 					break
 			
 			#flush the buffer, test if there is any data left
@@ -109,6 +119,7 @@ class UniConnection:
 			data = await self.reader.read(self.packetizer.buffer_size)
 			await self.packetizer.data_in(data)
 			if data == b'':
+				track_eof(self.sockrec)
 				break
 	
 
@@ -132,6 +143,7 @@ class UniConnection:
 					
 					data = await self.reader.read(self.packetizer.buffer_size)
 					if data == b'':
+						track_eof(self.sockrec)
 						protocol.eof_received()
 						break
 		except Exception as e:
