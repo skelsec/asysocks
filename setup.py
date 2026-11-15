@@ -49,8 +49,20 @@ setup(
 		'asn1crypto',
 		'cryptography',
 		'h11>=0.14.0',
-		#'netifaces>=0.10.4', #for the server modules, but I dont want to force it on everyone
+		'tqdm',
+		'psutil; sys_platform == "win32"',
 	],
+	extras_require={
+		'quic': ['aioquic'],
+		'mbedtls': ['python-mbedtls'],
+		'wsnet': ['wsnet', 'websockets'],
+		'auth': ['asyauth'],
+		'server': ['netifaces>=0.10.4'],
+		'test': [
+            'pytest',
+            'wsnet'
+        ],
+	},
 	entry_points={
 		'console_scripts': [
 			'asysocks-tunnel = asysocks.examples.sockstunnel:main',
