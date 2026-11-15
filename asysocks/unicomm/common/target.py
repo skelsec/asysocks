@@ -4,7 +4,7 @@ import copy
 import enum
 import ipaddress
 from typing import Callable, Dict, List
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 from asysocks.unicomm.common.unissl import UniSSL
 from asysocks.unicomm.common.proxy import UniProxyProto, UniProxyTarget
@@ -159,13 +159,17 @@ class UniTarget:
 		url_e = urlparse(connection_url)
 		domain = None
 		if url_e.username is not None:
-			if url_e.username.find('\\') != -1:
-				domain, username = url_e.username.split('\\')
+			# urlparse leaves the userinfo percent-encoded, so '%5C' has to be
+			# decoded before the domain\username split, otherwise the whole
+			# string is taken as the username and the domain is lost.
+			userinfo = unquote(url_e.username)
+			if userinfo.find('\\') != -1:
+				domain, username = userinfo.split('\\')
 				if domain == '.':
 					domain = None
 			else:
 				domain = None
-				username = url_e.username
+				username = userinfo
 
 		ip = url_e.hostname
 		if url_e.port is None and port is None:
