@@ -250,11 +250,10 @@ def main():
 	parser.add_argument('-t', '--timeout', type = int, default = None, help='Brute retries sleep time')
 	parser.add_argument('-w', '--worker-count', type = int, default = 1, help='Parallelism')
 	parser.add_argument('-v', '--verbose', action='count', default=0, help='Verbosity')
-	parser.add_argument('-s', '--silent', action='store_true', help = 'dont print banner')
+	parser.add_argument('-s', '--silent', action='store_true', help = "Don't print banner")
 	parser.add_argument('-o', '--out-file', help = 'output file')
-	parser.add_argument('--positive', action='store_true', help = 'only show sucsessful results')
-	parser.add_argument('proxies', nargs='*', help='connection string(s) of the target proxy. if you want a chain of proxies to use before reaching the target then supply the chain in order, the target must be the LAST OF THE URLS!!!')
-
+	parser.add_argument('--positive', action='store_true', help = 'Only show successful results')
+	parser.add_argument('proxies', nargs='*', help='Connection string(s) of the target proxy. if you want a chain of proxies to use before reaching the target then supply the chain in order, the target must be the LAST OF THE URLS!!!')
 
 	args = parser.parse_args()
 

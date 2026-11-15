@@ -17,9 +17,9 @@ def main():
 	parser.add_argument('-p', '--listen-port', type = int, default = 11111, help='Listener port number to bind to')
 	parser.add_argument('-t', '--timeout', type = int, default = None, help='Endpoint timeout')
 	parser.add_argument('-v', '--verbose', action='count', default=0)
-	parser.add_argument('dst_ip', help='IP address of the desination server')
-	parser.add_argument('dst_port', type = int, help='port number of the desination service')
-	parser.add_argument('proxy_connection_strings', nargs='*', help='connection string(s) decribing the socks proxy server connection properties')
+	parser.add_argument('dst_ip', help='IP address of the destination server')
+	parser.add_argument('dst_port', type = int, help='Port number of the destination service')
+	parser.add_argument('proxy_connection_strings', nargs='*', help='Connection string(s) describing the SOCKS proxy server connection properties')
 
 	args = parser.parse_args()
 
